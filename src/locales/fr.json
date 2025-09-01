@@ -1,0 +1,84 @@
+
+{
+  "nav": {
+    "home": "Accueil",
+    "howItWorks": "Comment ça marche",
+    "becomeOwner": "Devenir Propriétaire",
+    "profile": "Profil",
+    "login": "Connexion",
+    "dashboard": "Dashboard",
+    "explore": "Explorer"
+  },
+  "hero": {
+    "title": "Louez et partagez du matériel entre particuliers",
+    "subtitle": "La première plateforme de location d'équipements entre particuliers. Trouvez le matériel qu'il vous faut près de chez vous.",
+    "searchPlaceholder": "Rechercher un équipement...",
+    "cityPlaceholder": "Ville",
+    "search": "Rechercher",
+    "showingEquipmentsFor": "Équipements disponibles pour"
+  },
+  "banner": {
+    "title": "Louez facilement",
+    "description": "Découvrez des milliers d'outils et équipements près de chez vous. Location simple, rapide et sécurisée."
+  },
+  "common": {
+    "back": "Retour",
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "retry": "Réessayer",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "equipment": "équipement",
+    "equipments": "équipements",
+    "available": "disponible",
+    "availables": "disponibles",
+    "day": "jour",
+    "days": "jours",
+    "currency": "€"
+  },
+  "equipment": {
+    "popular": "Équipements populaires",
+    "noEquipment": "Aucun équipement trouvé",
+    "tryOtherSearch": "Essayez une autre recherche ou explorez d'autres villes"
+  },
+  "stats": {
+    "community": "Rejoignez la communauté 3W-LOC",
+    "trustUs": "Des milliers d'utilisateurs nous font confiance",
+    "activeUsers": "Utilisateurs actifs",
+    "completedRentals": "Locations réalisées",
+    "satisfaction": "Taux de satisfaction"
+  },
+  "countries": {
+    "france": "France",
+    "spain": "Espagne",
+    "portugal": "Portugal",
+    "benin": "Bénin"
+  },
+  "categories": {
+    "title": "Catégories",
+    "allCategories": "Toutes les catégories",
+    "construction": "Équipements de construction",
+    "agriculture": "Matériels agricoles",
+    "transport": "Véhicules de transport",
+    "manutention": "Équipements de manutention",
+    "electrique": "Outils électriques",
+    "sport": "Équipements de sport",
+    "evenementiel": "Événementiel",
+    "jardinage": "Jardinage",
+    "nettoyage": "Nettoyage",
+    "bricolage": "Bricolage"
+  },
+  "menu": {
+    "overview": "Vue d'ensemble",
+    "bookings": "Mes réservations",
+    "equipments": "Mes équipements",
+    "messages": "Messages",
+    "wallet": "Portefeuille",
+    "settings": "Paramètres",
+    "addEquipment": "Ajouter un équipement",
+    "signOut": "Se déconnecter",
+    "signIn": "Se connecter",
+    "contracts": "Contrats",
+    "history": "Historique"
+  }
+}

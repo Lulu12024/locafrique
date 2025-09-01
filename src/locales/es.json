@@ -1,0 +1,84 @@
+
+{
+  "nav": {
+    "home": "Inicio",
+    "howItWorks": "Cómo Funciona",
+    "becomeOwner": "Ser Propietario",
+    "profile": "Perfil",
+    "login": "Iniciar Sesión",
+    "dashboard": "Panel",
+    "explore": "Explorar"
+  },
+  "hero": {
+    "title": "Alquila e intercambia equipos entre particulares",
+    "subtitle": "La primera plataforma de alquiler de equipos entre particulares. Encuentra el equipo que necesitas cerca de ti.",
+    "searchPlaceholder": "Buscar equipo...",
+    "cityPlaceholder": "Ciudad",
+    "search": "Buscar",
+    "showingEquipmentsFor": "Equipos disponibles para"
+  },
+  "banner": {
+    "title": "Alquila fácilmente",
+    "description": "Descubre miles de herramientas y equipos cerca de ti. Alquiler simple, rápido y seguro."
+  },
+  "common": {
+    "back": "Volver",
+    "loading": "Cargando...",
+    "error": "Error",
+    "retry": "Reintentar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "equipment": "equipo",
+    "equipments": "equipos",
+    "available": "disponible",
+    "availables": "disponibles",
+    "day": "día",
+    "days": "días",
+    "currency": "€"
+  },
+  "equipment": {
+    "popular": "Equipos Populares",
+    "noEquipment": "No se encontró equipo",
+    "tryOtherSearch": "Prueba otra búsqueda o explora otras ciudades"
+  },
+  "stats": {
+    "community": "Únete a la comunidad 3W-LOC",
+    "trustUs": "Miles de usuarios confían en nosotros",
+    "activeUsers": "Usuarios activos",
+    "completedRentals": "Alquileres completados",
+    "satisfaction": "Tasa de satisfacción"
+  },
+  "countries": {
+    "france": "Francia",
+    "spain": "España",
+    "portugal": "Portugal",
+    "benin": "Benín"
+  },
+  "categories": {
+    "title": "Categorías",
+    "allCategories": "Todas las categorías",
+    "construction": "Equipos de Construcción",
+    "agriculture": "Equipos Agrícolas",
+    "transport": "Vehículos de Transporte",
+    "manutention": "Equipos de Manipulación",
+    "electrique": "Herramientas Eléctricas",
+    "sport": "Equipos Deportivos",
+    "evenementiel": "Equipos de Eventos",
+    "jardinage": "Herramientas de Jardín",
+    "nettoyage": "Equipos de Limpieza",
+    "bricolage": "Herramientas de Bricolaje"
+  },
+  "menu": {
+    "overview": "Resumen",
+    "bookings": "Mis Reservas",
+    "equipments": "Mis Equipos",
+    "messages": "Mensajes",
+    "wallet": "Cartera",
+    "settings": "Configuración",
+    "addEquipment": "Agregar Equipo",
+    "signOut": "Cerrar Sesión",
+    "signIn": "Iniciar Sesión",
+    "contracts": "Contratos",
+    "history": "Historial"
+  }
+}

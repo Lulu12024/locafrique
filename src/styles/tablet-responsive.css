@@ -1,0 +1,178 @@
+
+/* Styles spécifiques pour tablettes */
+
+/* Breakpoints tablettes (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  
+  /* Navigation adaptée tablette */
+  .navbar-tablet {
+    padding: 0 2rem;
+  }
+  
+  /* Grilles adaptées pour tablettes */
+  .tablet-grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .tablet-grid-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  /* Hero section tablette */
+  .hero-tablet {
+    height: 45vh;
+    min-height: 400px;
+  }
+  
+  .hero-search-tablet {
+    max-width: 90%;
+    margin: 0 auto;
+  }
+  
+  /* Sidebar responsive pour tablettes */
+  .sidebar-tablet {
+    width: 280px;
+  }
+  
+  /* Cards adaptées tablette */
+  .card-tablet {
+    padding: 1.5rem;
+  }
+  
+  /* Text sizes pour tablettes */
+  .text-tablet-sm {
+    font-size: 0.9rem;
+  }
+  
+  .text-tablet-base {
+    font-size: 1rem;
+  }
+  
+  .text-tablet-lg {
+    font-size: 1.25rem;
+  }
+  
+  .text-tablet-xl {
+    font-size: 1.5rem;
+  }
+  
+  /* Spacing pour tablettes */
+  .spacing-tablet-sm {
+    gap: 0.75rem;
+  }
+  
+  .spacing-tablet-md {
+    gap: 1rem;
+  }
+  
+  .spacing-tablet-lg {
+    gap: 1.5rem;
+  }
+  
+  /* Buttons adaptés tablette */
+  .btn-tablet {
+    padding: 0.75rem 1.5rem;
+    font-size: 0.95rem;
+  }
+  
+  /* Modal adaptée tablette */
+  .modal-tablet {
+    width: 85%;
+    max-width: 600px;
+  }
+  
+  /* Dashboard layout tablette */
+  .dashboard-tablet {
+    flex-direction: row;
+  }
+  
+  .dashboard-sidebar-tablet {
+    width: 280px;
+    flex-shrink: 0;
+  }
+  
+  /* Search results tablette */
+  .search-results-tablet {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+  
+  /* Form layout tablette */
+  .form-tablet {
+    max-width: 500px;
+    margin: 0 auto;
+  }
+  
+  .form-group-tablet {
+    margin-bottom: 1.25rem;
+  }
+  
+  /* Image gallery tablette */
+  .gallery-tablet {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  
+  /* Stats cards tablette */
+  .stats-tablet {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  /* Navigation tabs tablette */
+  .tabs-tablet {
+    justify-content: center;
+    gap: 1rem;
+  }
+  
+  /* Footer tablette */
+  .footer-tablet {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+  }
+}
+
+/* Portrait tablette (768px - 1024px en portrait) */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  .portrait-tablet-single-col {
+    grid-template-columns: 1fr;
+  }
+  
+  .portrait-tablet-padding {
+    padding: 1rem 1.5rem;
+  }
+}
+
+/* Landscape tablette (768px - 1024px en landscape) */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: landscape) {
+  .landscape-tablet-two-col {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .landscape-tablet-sidebar {
+    width: 300px;
+  }
+}
+
+/* Transitions pour tablettes */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .tablet-transition {
+    transition: all 0.2s ease-out;
+  }
+  
+  .tablet-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+}
+
+/* Touch optimizations pour tablettes */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .touch-tablet {
+    min-height: 48px;
+    min-width: 48px;
+  }
+  
+  .touch-tablet-large {
+    min-height: 56px;
+    min-width: 56px;
+  }
+}

@@ -1,0 +1,84 @@
+
+{
+  "nav": {
+    "home": "Home",
+    "howItWorks": "How it Works",
+    "becomeOwner": "Become Owner",
+    "profile": "Profile",
+    "login": "Login",
+    "dashboard": "Dashboard",
+    "explore": "Explore"
+  },
+  "hero": {
+    "title": "Rent and share equipment between individuals",
+    "subtitle": "The first peer-to-peer equipment rental platform. Find the equipment you need near you.",
+    "searchPlaceholder": "Search for equipment...",
+    "cityPlaceholder": "City",
+    "search": "Search",
+    "showingEquipmentsFor": "Equipment available for"
+  },
+  "banner": {
+    "title": "Rent easily",
+    "description": "Discover thousands of tools and equipment near you. Simple, fast and secure rental."
+  },
+  "common": {
+    "back": "Back",
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Retry",
+    "save": "Save",
+    "cancel": "Cancel",
+    "equipment": "equipment",
+    "equipments": "equipments",
+    "available": "available",
+    "availables": "available",
+    "day": "day",
+    "days": "days",
+    "currency": "$"
+  },
+  "equipment": {
+    "popular": "Popular Equipment",
+    "noEquipment": "No equipment found",
+    "tryOtherSearch": "Try another search or explore other cities"
+  },
+  "stats": {
+    "community": "Join the 3W-LOC community",
+    "trustUs": "Thousands of users trust us",
+    "activeUsers": "Active users",
+    "completedRentals": "Completed rentals",
+    "satisfaction": "Satisfaction rate"
+  },
+  "countries": {
+    "france": "France",
+    "spain": "Spain",
+    "portugal": "Portugal",
+    "benin": "Benin"
+  },
+  "categories": {
+    "title": "Categories",
+    "allCategories": "All categories",
+    "construction": "Construction Equipment",
+    "agriculture": "Agricultural Equipment",
+    "transport": "Transport Vehicles",
+    "manutention": "Handling Equipment",
+    "electrique": "Electric Tools",
+    "sport": "Sports Equipment",
+    "evenementiel": "Event Equipment",
+    "jardinage": "Gardening Tools",
+    "nettoyage": "Cleaning Equipment",
+    "bricolage": "DIY Tools"
+  },
+  "menu": {
+    "overview": "Overview",
+    "bookings": "My Bookings",
+    "equipments": "My Equipment",
+    "messages": "Messages",
+    "wallet": "Wallet",
+    "settings": "Settings",
+    "addEquipment": "Add Equipment",
+    "signOut": "Sign Out",
+    "signIn": "Sign In",
+    "contracts": "Contracts",
+    "history": "History"
+  }
+}

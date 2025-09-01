@@ -1,0 +1,84 @@
+
+{
+  "nav": {
+    "home": "Início",
+    "howItWorks": "Como Funciona",
+    "becomeOwner": "Tornar-se Proprietário",
+    "profile": "Perfil",
+    "login": "Entrar",
+    "dashboard": "Painel",
+    "explore": "Explorar"
+  },
+  "hero": {
+    "title": "Alugue e compartilhe equipamentos entre particulares",
+    "subtitle": "A primeira plataforma de aluguel de equipamentos entre particulares. Encontre o equipamento que precisa perto de você.",
+    "searchPlaceholder": "Procurar equipamento...",
+    "cityPlaceholder": "Cidade",
+    "search": "Procurar",
+    "showingEquipmentsFor": "Equipamentos disponíveis para"
+  },
+  "banner": {
+    "title": "Alugue facilmente",
+    "description": "Descubra milhares de ferramentas e equipamentos perto de você. Aluguel simples, rápido e seguro."
+  },
+  "common": {
+    "back": "Voltar",
+    "loading": "Carregando...",
+    "error": "Erro",
+    "retry": "Tentar novamente",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "equipment": "equipamento",
+    "equipments": "equipamentos",
+    "available": "disponível",
+    "availables": "disponíveis",
+    "day": "dia",
+    "days": "dias",
+    "currency": "€"
+  },
+  "equipment": {
+    "popular": "Equipamentos Populares",
+    "noEquipment": "Nenhum equipamento encontrado",
+    "tryOtherSearch": "Tente outra pesquisa ou explore outras cidades"
+  },
+  "stats": {
+    "community": "Junte-se à comunidade 3W-LOC",
+    "trustUs": "Milhares de usuários confiam em nós",
+    "activeUsers": "Usuários ativos",
+    "completedRentals": "Aluguéis realizados",
+    "satisfaction": "Taxa de satisfação"
+  },
+  "countries": {
+    "france": "França",
+    "spain": "Espanha",
+    "portugal": "Portugal",
+    "benin": "Benin"
+  },
+  "categories": {
+    "title": "Categorias",
+    "allCategories": "Todas as categorias",
+    "construction": "Equipamentos de Construção",
+    "agriculture": "Equipamentos Agrícolas",
+    "transport": "Veículos de Transporte",
+    "manutention": "Equipamentos de Manuseio",
+    "electrique": "Ferramentas Elétricas",
+    "sport": "Equipamentos Esportivos",
+    "evenementiel": "Equipamentos de Eventos",
+    "jardinage": "Ferramentas de Jardim",
+    "nettoyage": "Equipamentos de Limpeza",
+    "bricolage": "Ferramentas de Bricolagem"
+  },
+  "menu": {
+    "overview": "Visão Geral",
+    "bookings": "Minhas Reservas",
+    "equipments": "Meus Equipamentos",
+    "messages": "Mensagens",
+    "wallet": "Carteira",
+    "settings": "Configurações",
+    "addEquipment": "Adicionar Equipamento",
+    "signOut": "Sair",
+    "signIn": "Entrar",
+    "contracts": "Contratos",
+    "history": "Histórico"
+  }
+}

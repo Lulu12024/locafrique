@@ -1,0 +1,80 @@
+
+/* Styles spécifiques pour mobile */
+
+/* Safe area support pour iOS */
+.pt-safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.pb-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+.pl-safe-left {
+  padding-left: env(safe-area-inset-left);
+}
+
+.pr-safe-right {
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Optimisations tactiles */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+/* Améliorer les interactions tactiles */
+button, 
+input[type="button"], 
+input[type="submit"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Éviter le zoom sur les inputs sur mobile */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+textarea,
+select {
+  font-size: 16px;
+}
+
+/* Masquer la scrollbar sur mobile */
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* Support du mode sombre sur mobile */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+  }
+}
+
+/* Optimisations pour les gestes */
+.swipe-enabled {
+  touch-action: pan-x pan-y;
+}
+
+/* Animation améliorée pour mobile */
+@media (prefers-reduced-motion: no-preference) {
+  .mobile-transition {
+    transition: all 0.2s ease-out;
+  }
+}
+
+/* Améliorer la lisibilité sur petits écrans */
+@media (max-width: 640px) {
+  .text-responsive {
+    font-size: clamp(0.875rem, 2.5vw, 1rem);
+  }
+  
+  .heading-responsive {
+    font-size: clamp(1.5rem, 5vw, 2rem);
+  }
+}
