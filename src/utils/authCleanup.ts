@@ -15,7 +15,8 @@ export const cleanupAuthState = (preserveCurrentSession: boolean = true): void =
       // Nettoyer toutes les clés d'authentification Supabase de localStorage SAUF la session actuelle
       Object.keys(localStorage).forEach((key) => {
         if ((key.startsWith('supabase.auth.token') || key.includes('sb-')) && 
-            !key.includes('sb-' + 'eqvgbqxaefpkbfetubrt' + '-auth-token')) {
+            // !key.includes('sb-' + 'eqvgbqxaefpkbfetubrt' + '-auth-token')) {
+            !key.includes('sb-' + 'nvcgijtnwnbgxzuclbhy' + '-auth-token')) {
           localStorage.removeItem(key);
         }
       });
