@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+
 import { 
   Upload, 
   Plus, 
@@ -235,7 +236,9 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
     return true;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
     if (!validateForm()) return;
 
     setIsSubmitting(true);
@@ -263,14 +266,10 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
       console.log("📦 Données de l'équipement:", equipmentData);
 
       // Étape 1: Créer l'équipement
-      const result = await addEquipment(equipmentData);
+      // NOUVELLE INTERFACE : addEquipment retourne directement EquipmentData ou lance une exception
+      const createdEquipment = await addEquipment(equipmentData);
       
-      if (!result.success || !result.data) {
-        console.error("❌ Échec de la création de l'équipement:", result.error);
-        return;
-      }
-
-      console.log("✅ Équipement créé avec succès:", result.data.id);
+      console.log("✅ Équipement créé avec succès:", createdEquipment.id);
       setUploadProgress(25);
 
       // Étape 2: Upload des images
@@ -284,7 +283,7 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
           try {
             console.log(`📸 Upload image ${i + 1}/${images.length}: ${file.name}`);
             
-            const uploadResult = await uploadImage(file, result.data.id, isPrimary);
+            const uploadResult = await uploadImage(file, createdEquipment.id, isPrimary);
             
             if (uploadResult.success) {
               console.log(`✅ Image ${file.name} uploadée avec succès`);
@@ -306,9 +305,9 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
 
       setUploadProgress(100);
 
-      // Toast de succès final
+      // Toast de succès final (déjà affiché par useEquipments, mais on peut ajouter des détails)
       toast({
-        title: "🎉 Équipement créé avec succès !",
+        title: "🎉 Publication réussie !",
         description: (
           <div className="space-y-1">
             <p className="font-medium">"{formData.title}"</p>
@@ -340,11 +339,12 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
 
     } catch (error) {
       console.error("❌ Erreur lors de la soumission:", error);
-      toast({
-        title: "Erreur inattendue",
-        description: "Une erreur s'est produite lors de la création de l'équipement.",
-        variant: "destructive",
-      });
+      
+      // L'erreur a déjà été gérée et affichée par useEquipments
+      // On peut ajouter un toast additionnel si nécessaire
+      if (error instanceof Error) {
+        console.log("Erreur capturée:", error.message);
+      }
     } finally {
       setIsSubmitting(false);
     }

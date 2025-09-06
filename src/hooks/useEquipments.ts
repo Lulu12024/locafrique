@@ -1,7 +1,7 @@
-// src/hooks/useEquipments.ts - Version corrigée
+// src/hooks/useEquipments.ts - Version corrigée compatible
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/use-toast";
 import { EquipmentData } from '@/types/supabase';
 import { useAuth } from '@/hooks/auth';
 import { EQUIPMENT_CATEGORIES, validateCategory } from '@/data/categories';
@@ -19,14 +19,6 @@ interface AddEquipmentData {
   location?: string;
   city?: string;
   country?: string;
-}
-
-interface AddEquipmentResult {
-  success: boolean;
-  data?: EquipmentData;
-  error?: any;
-  errorCode?: string;
-  errorDetails?: string;
 }
 
 export function useEquipments() {
@@ -97,203 +89,6 @@ export function useEquipments() {
     };
   };
 
-  // Fonction principale d'ajout d'équipement
-  const addEquipment = useCallback(async (equipmentData: AddEquipmentData): Promise<AddEquipmentResult> => {
-    // Vérification préliminaire de l'utilisateur
-    if (!user?.id) {
-      console.error("❌ Utilisateur non connecté");
-      toast({
-        title: "Erreur d'authentification",
-        description: "Vous devez être connecté pour ajouter un équipement.",
-        variant: "destructive",
-      });
-      return { 
-        success: false, 
-        error: "Utilisateur non connecté",
-        errorCode: "AUTH_REQUIRED"
-      };
-    }
-
-    setIsLoading(true);
-
-    try {
-      console.log("📝 Début de l'ajout d'équipement:", equipmentData);
-
-      // Étape 1: Validation des données
-      const validation = validateEquipmentData(equipmentData);
-      if (!validation.valid) {
-        const errorMessage = validation.errors.join(", ");
-        console.error("❌ Validation échouée:", validation.errors);
-        
-        toast({
-          title: "Données invalides",
-          description: errorMessage,
-          variant: "destructive",
-        });
-        
-        return { 
-          success: false, 
-          error: errorMessage,
-          errorCode: "VALIDATION_FAILED"
-        };
-      }
-
-      // Étape 2: Vérification de la session utilisateur
-      const { data: sessionData, error: sessionError } = await supabase.auth.getUser();
-      if (sessionError || !sessionData.user) {
-        console.error("❌ Session invalide:", sessionError);
-        toast({
-          title: "Session expirée",
-          description: "Veuillez vous reconnecter pour continuer.",
-          variant: "destructive",
-        });
-        return { 
-          success: false, 
-          error: "Session invalide",
-          errorCode: "SESSION_INVALID"
-        };
-      }
-
-      // Étape 3: Normalisation des données
-      const insertData = normalizeEquipmentData(equipmentData, user.id);
-      console.log("📦 Données normalisées pour insertion:", insertData);
-
-      // Étape 4: Vérification des contraintes métier
-      // Vérifier si l'utilisateur a un profil complet
-      const { data: userProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('first_name, last_name, city')
-        .eq('user_id', user.id)
-        .single();
-
-      if (profileError || !userProfile?.first_name || !userProfile?.last_name) {
-        console.warn("⚠️ Profil utilisateur incomplet:", profileError);
-        toast({
-          title: "Profil incomplet",
-          description: "Veuillez compléter votre profil avant d'ajouter un équipement.",
-          variant: "destructive",
-        });
-        return { 
-          success: false, 
-          error: "Profil incomplet",
-          errorCode: "PROFILE_INCOMPLETE"
-        };
-      }
-
-      // Étape 5: Insertion dans la base de données
-      const { data: insertedData, error: insertError } = await supabase
-        .from('equipments')
-        .insert(insertData)
-        .select(`
-          *,
-          owner:profiles!equipments_owner_id_fkey(*)
-        `)
-        .single();
-
-      if (insertError) {
-        console.error("❌ Erreur lors de l'insertion:", insertError);
-        
-        // Analyse détaillée de l'erreur
-        const { message, solution } = analyzeInsertError(insertError);
-        
-        toast({
-          title: "Erreur lors de l'ajout",
-          description: message,
-          variant: "destructive",
-        });
-        
-        return { 
-          success: false, 
-          error: insertError,
-          errorCode: insertError.code,
-          errorDetails: solution
-        };
-      }
-
-      if (!insertedData) {
-        console.error("❌ Aucune donnée retournée après insertion");
-        toast({
-          title: "Erreur inattendue",
-          description: "L'équipement n'a pas pu être créé correctement.",
-          variant: "destructive",
-        });
-        return { 
-          success: false, 
-          error: "Aucune donnée retournée",
-          errorCode: "NO_DATA_RETURNED"
-        };
-      }
-
-      // Étape 6: Vérification post-insertion
-      const { data: verificationData, error: verificationError } = await supabase
-        .from('equipments')
-        .select('id, title, status, owner_id')
-        .eq('id', insertedData.id)
-        .single();
-
-      if (verificationError || !verificationData) {
-        console.warn("⚠️ Vérification échouée mais équipement créé:", verificationError);
-        // Ne pas considérer cela comme une erreur critique
-      }
-
-      console.log("✅ Équipement créé avec succès:", insertedData);
-
-      // Toast de succès avec détails
-      toast({
-        title: "🎉 Équipement ajouté avec succès !",
-        description: (
-          <div>
-            <p className="font-medium">"{insertedData.title}"</p>
-            <p className="text-sm text-gray-600">
-              Catégorie: {EQUIPMENT_CATEGORIES[insertedData.category]?.name || insertedData.category}
-            </p>
-            <p className="text-sm text-gray-600">
-              Prix: {insertedData.daily_price.toLocaleString()} FCFA/jour
-            </p>
-          </div>
-        ),
-        duration: 5000,
-      });
-
-      return { 
-        success: true, 
-        data: insertedData as EquipmentData 
-      };
-
-    } catch (error) {
-      console.error("❌ Erreur complète lors de l'ajout:", error);
-      
-      let errorMessage = "Une erreur inattendue s'est produite.";
-      let errorCode = "UNKNOWN_ERROR";
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-        if (error.message.includes('network')) {
-          errorCode = "NETWORK_ERROR";
-          errorMessage = "Problème de connexion réseau. Vérifiez votre connexion internet.";
-        } else if (error.message.includes('timeout')) {
-          errorCode = "TIMEOUT_ERROR";
-          errorMessage = "La requête a pris trop de temps. Réessayez dans quelques instants.";
-        }
-      }
-
-      toast({
-        title: "Erreur critique",
-        description: `Impossible d'ajouter l'équipement: ${errorMessage}`,
-        variant: "destructive",
-      });
-
-      return { 
-        success: false, 
-        error,
-        errorCode,
-        errorDetails: errorMessage
-      };
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user]);
-
   // Fonction d'analyse des erreurs d'insertion
   const analyzeInsertError = (error: any): { message: string; solution: string } => {
     switch (error.code) {
@@ -334,6 +129,161 @@ export function useEquipments() {
         };
     }
   };
+
+  // Fonction principale d'ajout d'équipment - COMPATIBLE avec AddEquipmentForm
+  const addEquipment = useCallback(async (equipmentData: AddEquipmentData): Promise<EquipmentData> => {
+    // Vérification préliminaire de l'utilisateur
+    if (!user?.id) {
+      console.error("❌ Utilisateur non connecté");
+      toast({
+        title: "Erreur d'authentification",
+        description: "Vous devez être connecté pour ajouter un équipement.",
+        variant: "destructive",
+      });
+      throw new Error("Utilisateur non connecté");
+    }
+
+    setIsLoading(true);
+
+    try {
+      console.log("📝 Début de l'ajout d'équipement:", equipmentData);
+
+      // Étape 1: Validation des données
+      const validation = validateEquipmentData(equipmentData);
+      if (!validation.valid) {
+        const errorMessage = validation.errors.join(", ");
+        console.error("❌ Validation échouée:", validation.errors);
+        
+        toast({
+          title: "Données invalides",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        
+        throw new Error(errorMessage);
+      }
+
+      // Étape 2: Vérification de la session utilisateur
+      const { data: sessionData, error: sessionError } = await supabase.auth.getUser();
+      if (sessionError || !sessionData.user) {
+        console.error("❌ Session invalide:", sessionError);
+        toast({
+          title: "Session expirée",
+          description: "Veuillez vous reconnecter pour continuer.",
+          variant: "destructive",
+        });
+        throw new Error("Session invalide");
+      }
+
+      // Étape 3: Normalisation des données
+      const insertData = normalizeEquipmentData(equipmentData, user.id);
+      console.log("📦 Données normalisées pour insertion:", insertData);
+
+      // Étape 4: Vérification des contraintes métier
+      // Vérifier si l'utilisateur a un profil complet
+      const { data: userProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, city')
+        .eq('user_id', user.id)
+        .single();
+
+      if (profileError || !userProfile?.first_name || !userProfile?.last_name) {
+        console.warn("⚠️ Profil utilisateur incomplet:", profileError);
+        toast({
+          title: "Profil incomplet",
+          description: "Veuillez compléter votre profil avant d'ajouter un équipement.",
+          variant: "destructive",
+        });
+        throw new Error("Profil incomplet");
+      }
+
+      // Étape 5: Insertion dans la base de données
+      const { data: insertedData, error: insertError } = await supabase
+        .from('equipments')
+        .insert(insertData)
+        .select(`
+          *,
+          owner:profiles!equipments_owner_id_fkey(*)
+        `)
+        .single();
+
+      if (insertError) {
+        console.error("❌ Erreur lors de l'insertion:", insertError);
+        
+        // Analyse détaillée de l'erreur
+        const { message } = analyzeInsertError(insertError);
+        
+        toast({
+          title: "Erreur lors de l'ajout",
+          description: message,
+          variant: "destructive",
+        });
+        
+        throw new Error(message);
+      }
+
+      if (!insertedData) {
+        console.error("❌ Aucune donnée retournée après insertion");
+        toast({
+          title: "Erreur inattendue",
+          description: "L'équipement n'a pas pu être créé correctement.",
+          variant: "destructive",
+        });
+        throw new Error("Aucune donnée retournée");
+      }
+
+      console.log("✅ Équipement créé avec succès:", insertedData);
+
+      // Toast de succès avec détails
+      toast({
+        title: "🎉 Équipement ajouté avec succès !",
+        description: (
+          <div>
+            <p className="font-medium">"{insertedData.title}"</p>
+            <p className="text-sm text-gray-600">
+              Catégorie: {EQUIPMENT_CATEGORIES[insertedData.category]?.name || insertedData.category}
+            </p>
+            <p className="text-sm text-gray-600">
+              Prix: {insertedData.daily_price.toLocaleString()} FCFA/jour
+            </p>
+          </div>
+        ),
+        duration: 5000,
+      });
+
+      // Retourner directement les données comme attendu par AddEquipmentForm
+      return insertedData as EquipmentData;
+
+    } catch (error) {
+      console.error("❌ Erreur complète lors de l'ajout:", error);
+      
+      let errorMessage = "Une erreur inattendue s'est produite.";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        if (error.message.includes('network')) {
+          errorMessage = "Problème de connexion réseau. Vérifiez votre connexion internet.";
+        } else if (error.message.includes('timeout')) {
+          errorMessage = "La requête a pris trop de temps. Réessayez dans quelques instants.";
+        }
+      }
+
+      // Ne pas afficher de toast d'erreur ici car les erreurs spécifiques 
+      // ont déjà été traitées dans les blocs précédents
+      if (!error || !(error instanceof Error) || !error.message.includes('Validation') && !error.message.includes('Session') && !error.message.includes('Profil')) {
+        toast({
+          title: "Erreur critique",
+          description: `Impossible d'ajouter l'équipement: ${errorMessage}`,
+          variant: "destructive",
+        });
+      }
+
+      // Relancer l'erreur pour que AddEquipmentForm puisse la gérer
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
 
   // Fonction pour récupérer les équipements de l'utilisateur
   const fetchUserEquipments = useCallback(async (): Promise<EquipmentData[]> => {
@@ -480,7 +430,7 @@ export function useEquipments() {
       }
       
       toast({
-        title: "Équipement supprimé",
+        title: "Équipment supprimé",
         description: "Votre équipement a été supprimé avec succès.",
       });
       
