@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -12,6 +11,7 @@ import {
 } from "@/components/ui/carousel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { CategoryIcon, getCorrectedCategories, getCorrectIconName } from "@/utils/categoryIconMapper";
 
 interface Category {
   id: string;
@@ -25,7 +25,7 @@ interface CategoryCarouselProps {
   selectedCategory?: string | null;
 }
 
-const CategoryCarousel: React.FC<CategoryCarouselProps> = ({ 
+const CategoryCarousel: React.FC<CategoryCarouselProps> = ({
   onCategorySelect, 
   selectedCategory 
 }) => {
@@ -34,98 +34,49 @@ const CategoryCarousel: React.FC<CategoryCarouselProps> = ({
   const { fetchCategories } = useCategories();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Catégories par défaut avec leurs icônes et traductions
-  const defaultCategories: Category[] = [
-    {
-      id: "construction",
-      name: t('categories.construction'),
-      icon: "🏗️"
-    },
-    {
-      id: "agriculture",
-      name: t('categories.agriculture'), 
-      icon: "🚜"
-    },
-    {
-      id: "transport",
-      name: t('categories.transport'),
-      icon: "🚚"
-    },
-    {
-      id: "manutention",
-      name: t('categories.manutention'),
-      icon: "🏋️"
-    },
-    {
-      id: "electrique",
-      name: t('categories.electrique'),
-      icon: "⚡"
-    },
-    {
-      id: "sport",
-      name: t('categories.sport'),
-      icon: "⚽"
-    },
-    {
-      id: "evenementiel", 
-      name: t('categories.evenementiel'),
-      icon: "🎪"
-    },
-    {
-      id: "jardinage",
-      name: t('categories.jardinage'),
-      icon: "🌱"
-    },
-    {
-      id: "nettoyage",
-      name: t('categories.nettoyage'),
-      icon: "🧽"
-    },
-    {
-      id: "bricolage",
-      name: t('categories.bricolage'),
-      icon: "🔨"
-    }
-  ];
+  // Utiliser les catégories corrigées comme fallback
+  const fallbackCategories = getCorrectedCategories();
 
-  // Charger les catégories de la base de données ou utiliser les catégories par défaut
   useEffect(() => {
     const loadCategories = async () => {
       try {
+        setError(null);
         const dbCategories = await fetchCategories();
+        
         if (dbCategories && dbCategories.length > 0) {
-          // Mapper les catégories de la DB avec les icônes par défaut
+          // Mapper les catégories de la DB avec les icônes corrigées
           const mappedCategories = dbCategories.map(dbCat => {
-            const defaultCat = defaultCategories.find(dc => dc.id === dbCat.id);
+            const fallbackCat = fallbackCategories.find(fc => fc.id === dbCat.id);
             return {
               id: dbCat.id,
-              name: dbCat.name,
-              icon: dbCat.icon || defaultCat?.icon || "📦"
+              name: dbCat.name || fallbackCat?.name || 'Catégorie',
+              icon: getCorrectIconName(dbCat.icon) || fallbackCat?.icon || 'Package'
             };
           });
           setCategories(mappedCategories);
         } else {
-          // Utiliser les catégories par défaut si aucune en DB
-          setCategories(defaultCategories);
+          // Utiliser les catégories corrigées si aucune en DB
+          setCategories(fallbackCategories);
         }
       } catch (error) {
         console.error('Erreur lors du chargement des catégories:', error);
-        // Utiliser les catégories par défaut en cas d'erreur
-        setCategories(defaultCategories);
+        setError('Erreur de chargement');
+        // Utiliser les catégories corrigées en cas d'erreur
+        setCategories(fallbackCategories);
       } finally {
         setLoading(false);
       }
     };
 
     loadCategories();
-  }, [t]); // Dépendance sur t pour recharger lors du changement de langue
+  }, [t]);
 
   const handleCategoryClick = (categoryId: string) => {
     if (onCategorySelect) {
       onCategorySelect(categoryId);
     } else {
-      // Naviguer vers la page de recherche avec le filtre de catégorie
       navigate(`/search?category=${categoryId}`);
     }
   };
@@ -140,6 +91,15 @@ const CategoryCarousel: React.FC<CategoryCarouselProps> = ({
             ))}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4 m-4">
+        <p className="text-red-700">⚠️ {error}</p>
+        <p className="text-sm text-red-600 mt-1">Utilisation des catégories par défaut</p>
       </div>
     );
   }
@@ -160,21 +120,23 @@ const CategoryCarousel: React.FC<CategoryCarouselProps> = ({
               <CarouselItem key={category.id} className="pl-2 basis-auto min-w-[120px] flex-shrink-0">
                 <Button
                   variant={selectedCategory === category.id ? "default" : "ghost"}
-                  onClick={() => handleCategoryClick(category.id)}
                   className={cn(
-                    "flex flex-col items-center space-y-1 h-auto py-3 px-4 rounded-lg transition-all duration-200 whitespace-nowrap w-full min-w-[110px] hover:scale-105",
-                    selectedCategory === category.id 
-                      ? "bg-primary text-primary-foreground shadow-md scale-105" 
-                      : "hover:bg-gray-100 hover:shadow-sm text-gray-700 bg-white border border-gray-200"
+                    "h-16 flex flex-col items-center justify-center space-y-1 px-4 py-2 rounded-lg transition-all duration-200",
+                    selectedCategory === category.id
+                      ? "bg-green-600 text-white shadow-md scale-105"
+                      : "hover:bg-gray-100 hover:scale-102"
                   )}
+                  onClick={() => handleCategoryClick(category.id)}
                 >
-                  <span className="text-lg mb-0.5">{category.icon}</span>
-                  <span className="text-xs font-medium leading-tight text-center">{category.name}</span>
+                  <CategoryIcon 
+                    iconName={category.icon} 
+                    className="h-6 w-6" 
+                  />
+                  <span className="text-xs font-medium text-center leading-tight">
+                    {category.name}
+                  </span>
                   {category.count && (
-                    <span className={cn(
-                      "text-xs opacity-70",
-                      selectedCategory === category.id ? "text-primary-foreground/80" : "text-gray-500"
-                    )}>
+                    <span className="text-xs opacity-75">
                       {category.count}
                     </span>
                   )}
@@ -182,12 +144,11 @@ const CategoryCarousel: React.FC<CategoryCarouselProps> = ({
               </CarouselItem>
             ))}
           </CarouselContent>
-          <CarouselPrevious className="hidden md:flex -left-4 bg-white/80 hover:bg-white" />
-          <CarouselNext className="hidden md:flex -right-4 bg-white/80 hover:bg-white" />
         </Carousel>
       </div>
     </div>
   );
 };
+
 
 export default CategoryCarousel;
