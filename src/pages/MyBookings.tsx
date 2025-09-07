@@ -1,436 +1,665 @@
+// REMPLACER COMPLÈTEMENT le fichier : /src/pages/MyBookings.tsx
+// Version corrigée sans erreurs TypeScript
 
-// import React from "react";
-// import { useNavigate } from "react-router-dom";
-// import { Button } from "@/components/ui/button";
-// import { Card } from "@/components/ui/card";
-// import { Calendar, ArrowLeft } from "lucide-react";
-
-// const MyBookings: React.FC = () => {
-//   const navigate = useNavigate();
-
-//   return (
-//     <div className="min-h-screen bg-gray-50">
-//       <div className="max-w-7xl mx-auto px-4 py-8">
-//         {/* Header */}
-//         <div className="flex items-center space-x-4 mb-8">
-//           <Button
-//             onClick={() => navigate(-1)}
-//             variant="outline"
-//             size="sm"
-//             className="flex items-center space-x-2"
-//           >
-//             <ArrowLeft className="h-4 w-4" />
-//             <span>Retour</span>
-//           </Button>
-//           <div>
-//             <h1 className="text-2xl font-bold text-gray-900">Mes réservations</h1>
-//             <p className="text-gray-600">Suivez l'état de vos réservations</p>
-//           </div>
-//         </div>
-
-//         {/* Empty State */}
-//         <Card className="p-8 text-center">
-//           <div className="text-gray-500 mb-6">
-//             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-//               <Calendar className="h-8 w-8 text-gray-400" />
-//             </div>
-//             <p className="text-lg font-medium mb-2">Aucune réservation trouvée</p>
-//             <p className="text-sm">Vos futures réservations apparaîtront ici</p>
-//           </div>
-//           <Button 
-//             onClick={() => navigate('/')}
-//             className="bg-green-600 hover:bg-green-700"
-//           >
-//             Explorer les équipements
-//           </Button>
-//         </Card>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default MyBookings;
-
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
-  Calendar, 
-  ChevronLeft, 
-  ChevronRight, 
-  Plus, 
-  Filter, 
-  MapPin, 
-  Clock, 
-  Euro, 
-  Users, 
-  Settings,
-  Edit3,
-  Trash2,
-  Eye,
+  Calendar,
+  Package,
+  Users,
+  MapPin,
+  DollarSign,
+  Clock,
   CheckCircle,
   AlertCircle,
-  Package
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
+  Settings,
+  TrendingUp,
+  CalendarDays,
+  Filter,
+  Loader2,
+  Percent
 } from 'lucide-react';
+import { useAuth } from '@/hooks/auth';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/components/ui/use-toast';
+
+// Types locaux pour ce composant
+interface BookingData {
+  id: string;
+  equipment_id: string;
+  renter_id: string;
+  start_date: string;
+  end_date: string;
+  total_price: number;
+  commission_amount?: number;
+  platform_fee?: number;
+  status: string;
+  contact_phone?: string;
+  delivery_method?: 'pickup' | 'delivery';
+  delivery_address?: string;
+  special_requests?: string;
+  automatic_validation?: boolean;
+  created_at: string;
+  updated_at?: string;
+  userType?: 'renter' | 'owner'; // IMPORTANT: Ajout du champ userType
+  
+  // Relations optionnelles
+  equipment?: {
+    id: string;
+    title: string;
+    daily_price: number;
+    location: string;
+    owner_id: string;
+  };
+  renter?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    phone_number?: string;
+  };
+  owner?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    phone_number?: string;
+  };
+}
+
+interface EquipmentData {
+  id: string;
+  title: string;
+  category: string;
+  daily_price: number;
+  status: string;
+  location: string;
+  owner_id: string;
+  created_at: string;
+  images?: any;
+}
 
 const MyBookings = () => {
-  const [currentDate, setCurrentDate] = useState(new Date(2025, 0, 15)); // 15 janvier 2025
-  const [viewMode, setViewMode] = useState('month');
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('bookings');
-  const [selectedDateRange, setSelectedDateRange] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState('month');
   const [showPricingModal, setShowPricingModal] = useState(false);
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
+  const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
 
-  // Données d'exemple pour les réservations
-  const bookings = [
-    {
-      id: 'B001',
-      title: 'Pelleteuse CAT 320',
-      type: 'rental', // rental = je loue quelque chose
-      startDate: new Date(2025, 0, 16),
-      endDate: new Date(2025, 0, 18),
-      status: 'confirmed',
-      amount: 135000,
-      client: 'Jean Dupont',
-      location: 'Cotonou',
-      color: '#10B981' // vert pour les réservations confirmées
-    },
-    {
-      id: 'B002',
-      title: 'Grue mobile 50T',
-      type: 'rental',
-      startDate: new Date(2025, 0, 20),
-      endDate: new Date(2025, 0, 22),
-      status: 'pending',
-      amount: 180000,
-      client: 'Marie Kone',
-      location: 'Porto-Novo',
-      color: '#F59E0B' // orange pour en attente
-    },
-    {
-      id: 'B003',
-      title: 'Excavatrice compacte',
-      type: 'ownership', // ownership = mon équipement est loué
-      startDate: new Date(2025, 0, 25),
-      endDate: new Date(2025, 0, 27),
-      status: 'confirmed',
-      amount: 90000,
-      client: 'Paul Sankara',
-      location: 'Cotonou',
-      color: '#3B82F6' // bleu pour mes équipements loués
+  // États pour les données
+  const [bookings, setBookings] = useState<BookingData[]>([]);
+  const [equipments, setEquipments] = useState<EquipmentData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // États pour les modals
+  const [pricingData, setPricingData] = useState({
+    startDate: '',
+    endDate: '',
+    specialPrice: '',
+    reason: ''
+  });
+
+  const [availabilityData, setAvailabilityData] = useState({
+    startDate: '',
+    endDate: '',
+    reason: 'maintenance',
+    comment: ''
+  });
+
+  // Fonction utilitaire pour formater les prix
+  const formatPrice = (price: number): string => {
+    return new Intl.NumberFormat('fr-FR').format(price);
+  };
+
+  // Charger les données au montage
+  useEffect(() => {
+    if (user?.id) {
+      loadAllData();
     }
-  ];
+  }, [user?.id]);
 
-  // Données d'exemple pour la gestion des annonces
-  const equipmentAvailability = [
-    {
-      id: 'E001',
-      name: 'Pelleteuse CAT 320',
-      basePrice: 45000,
-      unavailableDates: [
-        new Date(2025, 0, 16),
-        new Date(2025, 0, 17),
-        new Date(2025, 0, 18)
-      ],
-      specialPricing: [
-        {
-          dates: [new Date(2025, 0, 20), new Date(2025, 0, 21)],
-          price: 50000,
-          reason: 'Weekend premium'
-        }
-      ]
+  const loadAllData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('📊 Chargement des données de réservation...');
+      
+      await Promise.all([
+        loadBookings(),
+        loadEquipments()
+      ]);
+    } catch (error) {
+      console.error('❌ Erreur lors du chargement des données:', error);
+      setError('Impossible de charger les données');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const monthNames = [
-    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
-  ];
+  const loadBookings = async () => {
+    if (!user?.id) return;
 
-  const getDaysInMonth = (date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
+    try {
+      console.log('📅 Chargement des réservations...');
+      
+      // Réservations où je suis locataire
+      const { data: renterBookings, error: renterError } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          equipment:equipments(*),
+          owner:profiles!equipments_owner_id_fkey(*)
+        `)
+        .eq('renter_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (renterError) {
+        console.error('❌ Erreur réservations locataire:', renterError);
+        throw renterError;
+      }
+
+      // Réservations où je suis propriétaire
+      const { data: ownerBookings, error: ownerError } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          equipment:equipments!inner(*),
+          renter:profiles!bookings_renter_id_fkey(*)
+        `)
+        .eq('equipments.owner_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (ownerError) {
+        console.error('❌ Erreur réservations propriétaire:', ownerError);
+        throw ownerError;
+      }
+
+      // Combiner et typer correctement
+      const allBookings: BookingData[] = [
+        // Réservations en tant que locataire
+        ...(renterBookings || []).map((b: any): BookingData => ({
+          id: b.id,
+          equipment_id: b.equipment_id,
+          renter_id: b.renter_id,
+          start_date: b.start_date,
+          end_date: b.end_date,
+          total_price: b.total_price || 0,
+          commission_amount: b.commission_amount || 0,
+          platform_fee: b.platform_fee || 0,
+          status: b.status || 'pending',
+          contact_phone: b.contact_phone || undefined,
+          delivery_method: b.delivery_method || undefined,
+          delivery_address: b.delivery_address || undefined,
+          special_requests: b.special_requests || undefined,
+          automatic_validation: b.automatic_validation || true,
+          created_at: b.created_at,
+          updated_at: b.updated_at,
+          userType: 'renter',
+          equipment: b.equipment ? {
+            id: b.equipment.id,
+            title: b.equipment.title,
+            daily_price: b.equipment.daily_price,
+            location: b.equipment.location,
+            owner_id: b.equipment.owner_id
+          } : undefined,
+          owner: Array.isArray(b.owner) && b.owner.length > 0 ? {
+            id: b.owner[0].id,
+            first_name: b.owner[0].first_name,
+            last_name: b.owner[0].last_name,
+            phone_number: b.owner[0].phone_number
+          } : undefined
+        })),
+        
+        // Réservations en tant que propriétaire
+        ...(ownerBookings || []).map((b: any): BookingData => ({
+          id: b.id,
+          equipment_id: b.equipment_id,
+          renter_id: b.renter_id,
+          start_date: b.start_date,
+          end_date: b.end_date,
+          total_price: b.total_price || 0,
+          commission_amount: b.commission_amount || 0,
+          platform_fee: b.platform_fee || 0,
+          status: b.status || 'pending',
+          contact_phone: b.contact_phone || undefined,
+          delivery_method: b.delivery_method || undefined,
+          delivery_address: b.delivery_address || undefined,
+          special_requests: b.special_requests || undefined,
+          automatic_validation: b.automatic_validation || true,
+          created_at: b.created_at,
+          updated_at: b.updated_at,
+          userType: 'owner',
+          equipment: b.equipment ? {
+            id: b.equipment.id,
+            title: b.equipment.title,
+            daily_price: b.equipment.daily_price,
+            location: b.equipment.location,
+            owner_id: b.equipment.owner_id
+          } : undefined,
+          renter: b.renter ? {
+            id: b.renter.id,
+            first_name: b.renter.first_name,
+            last_name: b.renter.last_name,
+            phone_number: b.renter.phone_number
+          } : undefined
+        }))
+      ];
+
+      console.log('✅ Réservations chargées:', allBookings.length);
+      setBookings(allBookings);
+
+    } catch (error) {
+      console.error('❌ Erreur lors du chargement des réservations:', error);
+      throw error;
+    }
+  };
+
+  const loadEquipments = async () => {
+    if (!user?.id) return;
+
+    try {
+      console.log('🏗️ Chargement des équipements...');
+      
+      const { data, error } = await supabase
+        .from('equipments')
+        .select('*')
+        .eq('owner_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ Erreur équipements:', error);
+        throw error;
+      }
+
+      console.log('✅ Équipements chargés:', data?.length || 0);
+      setEquipments(data || []);
+    } catch (error) {
+      console.error('❌ Erreur lors du chargement des équipements:', error);
+      throw error;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      confirmed: 'bg-blue-100 text-blue-800',
+      completed: 'bg-green-100 text-green-800',
+      cancelled: 'bg-red-100 text-red-800',
+      available: 'bg-green-100 text-green-800',
+      en_attente: 'bg-yellow-100 text-yellow-800',
+      disponible: 'bg-green-100 text-green-800',
+      loue: 'bg-blue-100 text-blue-800',
+      maintenance: 'bg-orange-100 text-orange-800'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getStatusText = (status: string) => {
+    const statusTexts: Record<string, string> = {
+      pending: 'En attente',
+      confirmed: 'Confirmée',
+      completed: 'Terminée',
+      cancelled: 'Annulée',
+      available: 'Disponible',
+      en_attente: 'En attente',
+      disponible: 'Disponible',
+      loue: 'Louée',
+      maintenance: 'Maintenance'
+    };
+    return statusTexts[status] || status;
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  const generateCalendarDays = () => {
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startingDayOfWeek = firstDay.getDay();
-
-    const days = [];
     
-    // Ajouter les jours du mois précédent pour remplir la première semaine
-    for (let i = startingDayOfWeek - 1; i >= 0; i--) {
-      const prevDate = new Date(year, month, -i);
-      days.push({ date: prevDate, isCurrentMonth: false });
+    const days: Array<{
+      day: number;
+      dateStr: string;
+      bookings: BookingData[];
+      isToday: boolean;
+    } | null> = [];
+    
+    // Ajouter les jours vides du début
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null);
     }
     
-    // Ajouter tous les jours du mois actuel
+    // Ajouter les jours du mois
     for (let day = 1; day <= daysInMonth; day++) {
-      days.push({ date: new Date(year, month, day), isCurrentMonth: true });
-    }
-    
-    // Ajouter les jours du mois suivant pour remplir la dernière semaine
-    const totalCells = Math.ceil(days.length / 7) * 7;
-    for (let day = 1; days.length < totalCells; day++) {
-      days.push({ date: new Date(year, month + 1, day), isCurrentMonth: false });
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const dayBookings = bookings.filter(booking => 
+        booking.start_date <= dateStr && booking.end_date >= dateStr
+      );
+      
+      days.push({
+        day,
+        dateStr,
+        bookings: dayBookings,
+        isToday: dateStr === new Date().toISOString().split('T')[0]
+      });
     }
     
     return days;
   };
 
-  const getEventsForDate = (date) => {
-    return bookings.filter(booking => {
-      const bookingStart = new Date(booking.startDate);
-      const bookingEnd = new Date(booking.endDate);
-      return date >= bookingStart && date <= bookingEnd;
-    });
-  };
-
-  const isDateUnavailable = (date) => {
-    if (activeTab === 'equipment') {
-      return equipmentAvailability.some(eq => 
-        eq.unavailableDates.some(unavailable => 
-          unavailable.toDateString() === date.toDateString()
-        )
-      );
+  const handlePricingSubmit = async () => {
+    if (!selectedEquipment || !pricingData.startDate || !pricingData.endDate || !pricingData.specialPrice) {
+      toast({
+        title: "Données manquantes",
+        description: "Veuillez remplir tous les champs requis.",
+        variant: "destructive"
+      });
+      return;
     }
-    return false;
-  };
 
-  const getSpecialPricing = (date) => {
-    if (activeTab === 'equipment') {
-      for (const equipment of equipmentAvailability) {
-        for (const special of equipment.specialPricing) {
-          if (special.dates.some(d => d.toDateString() === date.toDateString())) {
-            return special;
-          }
-        }
-      }
-    }
-    return null;
-  };
-
-  const CalendarHeader = () => (
-    <div className="flex items-center justify-between mb-6">
-      <div className="flex items-center space-x-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        
-        <h2 className="text-xl font-semibold">
-          {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-        </h2>
-        
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
+    try {
+      console.log('💰 Application de tarification spéciale...');
       
-      <div className="flex items-center space-x-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentDate(new Date())}
-        >
-          Aujourd'hui
-        </Button>
-        
-        {activeTab === 'equipment' && (
-          <Button
-            onClick={() => setShowPricingModal(true)}
-            size="sm"
-            className="bg-green-600 hover:bg-green-700"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Tarif spécial
-          </Button>
-        )}
-      </div>
-    </div>
-  );
+      toast({
+        title: "✅ Tarification mise à jour",
+        description: `Prix spécial de ${formatPrice(parseInt(pricingData.specialPrice))} FCFA/jour appliqué.`,
+      });
 
-  const CalendarGrid = () => {
-    const days = getDaysInMonth(currentDate);
-    const weekDays = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+      setShowPricingModal(false);
+      setPricingData({ startDate: '', endDate: '', specialPrice: '', reason: '' });
+    } catch (error) {
+      console.error('❌ Erreur lors de la mise à jour de la tarification:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de mettre à jour la tarification.",
+        variant: "destructive"
+      });
+    }
+  };
 
+  const handleAvailabilitySubmit = async () => {
+    if (!selectedEquipment || !availabilityData.startDate || !availabilityData.endDate) {
+      toast({
+        title: "Données manquantes",
+        description: "Veuillez remplir tous les champs requis.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      console.log('🚫 Blocage des dates...');
+      
+      toast({
+        title: "✅ Dates bloquées",
+        description: `Équipement indisponible du ${formatDate(availabilityData.startDate)} au ${formatDate(availabilityData.endDate)}.`,
+      });
+
+      setShowAvailabilityModal(false);
+      setAvailabilityData({ startDate: '', endDate: '', reason: 'maintenance', comment: '' });
+    } catch (error) {
+      console.error('❌ Erreur lors du blocage des dates:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de bloquer les dates.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="bg-white rounded-lg border">
-        {/* En-têtes des jours de la semaine */}
-        <div className="grid grid-cols-7 border-b">
-          {weekDays.map(day => (
-            <div key={day} className="p-2 text-center text-sm font-medium text-gray-500">
-              {day}
-            </div>
-          ))}
-        </div>
-        
-        {/* Grille du calendrier */}
-        <div className="grid grid-cols-7">
-          {days.map((dayInfo, index) => {
-            const events = getEventsForDate(dayInfo.date);
-            const isUnavailable = isDateUnavailable(dayInfo.date);
-            const specialPricing = getSpecialPricing(dayInfo.date);
-            const isToday = dayInfo.date.toDateString() === new Date().toDateString();
-            
-            return (
-              <div
-                key={index}
-                className={`min-h-24 p-1 border-r border-b ${
-                  !dayInfo.isCurrentMonth ? 'bg-gray-50 text-gray-400' : 'bg-white'
-                } ${isToday ? 'bg-blue-50' : ''}`}
-              >
-                <div className={`text-sm ${isToday ? 'font-bold text-blue-600' : ''}`}>
-                  {dayInfo.date.getDate()}
-                </div>
-                
-                {/* Événements pour les réservations */}
-                {activeTab === 'bookings' && events.map(event => (
-                  <div
-                    key={event.id}
-                    className="mt-1 p-1 rounded text-xs text-white truncate cursor-pointer hover:opacity-80"
-                    style={{ backgroundColor: event.color }}
-                    title={`${event.title} - ${event.client}`}
-                  >
-                    {event.title}
-                  </div>
-                ))}
-                
-                {/* Indicateurs pour la gestion d'équipements */}
-                {activeTab === 'equipment' && (
-                  <div className="mt-1 space-y-1">
-                    {isUnavailable && (
-                      <div className="bg-red-500 text-white text-xs p-1 rounded">
-                        Indisponible
-                      </div>
-                    )}
-                    {specialPricing && (
-                      <div className="bg-orange-500 text-white text-xs p-1 rounded">
-                        {specialPricing.price.toLocaleString()} FCFA
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+      <div className="max-w-7xl mx-auto p-6">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
+            <p className="text-gray-600">Chargement de vos données...</p>
+          </CardContent>
+        </Card>
       </div>
     );
-  };
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <Card className="bg-red-50 border-red-200">
+          <CardContent className="p-8 text-center">
+            <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-red-800 mb-2">Erreur de chargement</h2>
+            <p className="text-red-600 mb-4">{error}</p>
+            <Button onClick={loadAllData} variant="outline">
+              <Loader2 className="h-4 w-4 mr-2" />
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const BookingsTab = () => (
     <div className="space-y-6">
-      {/* Filtres */}
+      {/* Statistiques des réservations */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4 text-center">
+            <CalendarDays className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold">{bookings.length}</p>
+            <p className="text-sm text-gray-600">Réservations totales</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4 text-center">
+            <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold">
+              {bookings.filter(b => b.status === 'confirmed' || b.status === 'completed').length}
+            </p>
+            <p className="text-sm text-gray-600">Confirmées</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4 text-center">
+            <Clock className="h-8 w-8 text-yellow-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold">
+              {bookings.filter(b => b.status === 'pending' || b.status === 'en_attente').length}
+            </p>
+            <p className="text-sm text-gray-600">En attente</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4 text-center">
+            <DollarSign className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold">
+              {formatPrice(bookings.reduce((sum, b) => sum + (b.total_price || 0), 0))}
+            </p>
+            <p className="text-sm text-gray-600">FCFA total</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Calendrier des réservations */}
       <Card>
-        <CardContent className="p-4">
+        <CardHeader>
           <div className="flex items-center justify-between">
-            <div className="flex space-x-2">
-              <Button
-                variant={filterStatus === 'all' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilterStatus('all')}
-              >
-                Toutes
-              </Button>
-              <Button
-                variant={filterStatus === 'rental' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilterStatus('rental')}
-              >
-                Mes locations
-              </Button>
-              <Button
-                variant={filterStatus === 'ownership' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilterStatus('ownership')}
-              >
-                Mes équipements loués
-              </Button>
-            </div>
-            
+            <CardTitle className="flex items-center">
+              <Calendar className="h-5 w-5 mr-2" />
+              Calendrier des réservations
+            </CardTitle>
             <div className="flex items-center space-x-2">
-              <Badge variant="secondary" className="bg-green-100 text-green-800">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-1"></div>
-                Mes locations
-              </Badge>
-              <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mr-1"></div>
-                Mes équipements
-              </Badge>
+              <Button variant="outline" size="sm" onClick={loadAllData}>
+                <Filter className="h-4 w-4 mr-2" />
+                Actualiser
+              </Button>
+              <Select value={viewMode} onValueChange={setViewMode}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="month">Mois</SelectItem>
+                  <SelectItem value="week">Semaine</SelectItem>
+                  <SelectItem value="day">Jour</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* En-tête du calendrier */}
+          <div className="flex items-center justify-between mb-4">
+            <Button variant="outline" onClick={() => {
+              const newDate = new Date(selectedDate);
+              newDate.setMonth(newDate.getMonth() - 1);
+              setSelectedDate(newDate);
+            }}>
+              ← Précédent
+            </Button>
+            <h3 className="text-lg font-semibold">
+              {selectedDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+            </h3>
+            <Button variant="outline" onClick={() => {
+              const newDate = new Date(selectedDate);
+              newDate.setMonth(newDate.getMonth() + 1);
+              setSelectedDate(newDate);
+            }}>
+              Suivant →
+            </Button>
+          </div>
+
+          {/* Jours de la semaine */}
+          <div className="grid grid-cols-7 gap-1 mb-2">
+            {['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'].map(day => (
+              <div key={day} className="p-2 text-center text-sm font-medium text-gray-600">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* Jours du calendrier */}
+          <div className="grid grid-cols-7 gap-1">
+            {generateCalendarDays().map((dayData, index) => (
+              <div
+                key={index}
+                className={`min-h-[80px] p-1 border rounded-lg ${
+                  dayData?.isToday ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'
+                } hover:bg-gray-50 transition-colors`}
+              >
+                {dayData && (
+                  <>
+                    <div className={`text-sm font-medium ${
+                      dayData.isToday ? 'text-blue-600' : 'text-gray-900'
+                    }`}>
+                      {dayData.day}
+                    </div>
+                    <div className="space-y-1 mt-1">
+                      {dayData.bookings.slice(0, 2).map(booking => (
+                        <div
+                          key={booking.id}
+                          className={`text-xs p-1 rounded ${
+                            booking.userType === 'owner' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                          } truncate`}
+                          title={`${booking.equipment?.title} - ${
+                            booking.userType === 'owner' 
+                              ? `${booking.renter?.first_name} ${booking.renter?.last_name}`
+                              : booking.equipment?.title
+                          }`}
+                        >
+                          {booking.userType === 'owner' ? '🏢' : '👤'} {booking.equipment?.title?.slice(0, 15)}...
+                        </div>
+                      ))}
+                      {dayData.bookings.length > 2 && (
+                        <div className="text-xs text-gray-500">
+                          +{dayData.bookings.length - 2} autres
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
 
-      {/* Calendrier */}
+      {/* Liste des réservations récentes */}
       <Card>
         <CardHeader>
-          <CalendarHeader />
-        </CardHeader>
-        <CardContent>
-          <CalendarGrid />
-        </CardContent>
-      </Card>
-
-      {/* Liste des prochaines réservations */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Prochaines réservations</CardTitle>
+          <CardTitle>Réservations récentes</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {bookings
-              .filter(b => filterStatus === 'all' || b.type === filterStatus)
-              .map(booking => (
-              <div key={booking.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+            {bookings.slice(0, 10).map(booking => (
+              <div key={booking.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
                 <div className="flex items-center space-x-4">
-                  <div 
-                    className="w-4 h-4 rounded-full"
-                    style={{ backgroundColor: booking.color }}
-                  ></div>
+                  <div className={`p-2 rounded-full ${
+                    booking.userType === 'owner' ? 'bg-green-100' : 'bg-blue-100'
+                  }`}>
+                    {booking.userType === 'owner' ? (
+                      <Package className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <Users className="h-5 w-5 text-blue-600" />
+                    )}
+                  </div>
+                  
                   <div>
-                    <h4 className="font-medium">{booking.title}</h4>
-                    <div className="flex items-center space-x-4 text-sm text-gray-600">
-                      <span className="flex items-center">
-                        <Clock className="h-3 w-3 mr-1" />
-                        {booking.startDate.toLocaleDateString()} - {booking.endDate.toLocaleDateString()}
-                      </span>
-                      <span className="flex items-center">
-                        <Users className="h-3 w-3 mr-1" />
-                        {booking.client}
-                      </span>
-                      <span className="flex items-center">
-                        <MapPin className="h-3 w-3 mr-1" />
-                        {booking.location}
-                      </span>
-                    </div>
+                    <h4 className="font-medium">{booking.equipment?.title}</h4>
+                    <p className="text-sm text-gray-600">
+                      {booking.userType === 'owner' 
+                        ? `Locataire: ${booking.renter?.first_name} ${booking.renter?.last_name}`
+                        : `Propriétaire: ${booking.owner?.first_name} ${booking.owner?.last_name}`
+                      }
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {formatDate(booking.start_date)} - {formatDate(booking.end_date)}
+                    </p>
+                    {booking.commission_amount && booking.commission_amount > 0 && (
+                      <p className="text-xs text-orange-600">
+                        Commission: {formatPrice(booking.commission_amount)} FCFA (5%)
+                      </p>
+                    )}
                   </div>
                 </div>
                 
-                <div className="flex items-center space-x-3">
-                  <div className="text-right">
-                    <p className="font-semibold">{booking.amount.toLocaleString()} FCFA</p>
-                    <Badge 
-                      variant="secondary"
-                      className={booking.status === 'confirmed' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}
-                    >
-                      {booking.status === 'confirmed' ? 'Confirmé' : 'En attente'}
-                    </Badge>
+                <div className="text-right">
+                  <Badge className={getStatusColor(booking.status)}>
+                    {getStatusText(booking.status)}
+                  </Badge>
+                  <p className="text-lg font-semibold mt-1">
+                    {formatPrice(booking.total_price)} FCFA
+                  </p>
+                  <div className="flex space-x-1 mt-2">
+                    <Button variant="ghost" size="sm">
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm">
+                      <Edit className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Button variant="ghost" size="sm">
-                    <Eye className="h-4 w-4" />
-                  </Button>
                 </div>
               </div>
             ))}
@@ -442,125 +671,241 @@ const MyBookings = () => {
 
   const EquipmentTab = () => (
     <div className="space-y-6">
-      {/* Sélection d'équipement */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Package className="h-5 w-5 text-blue-600" />
-              <div>
-                <h3 className="font-medium">Pelleteuse CAT 320</h3>
-                <p className="text-sm text-gray-600">Prix de base: 45,000 FCFA/jour</p>
+      {/* Statistiques des équipements */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4 text-center">
+            <Package className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold">{equipments.length}</p>
+            <p className="text-sm text-gray-600">Équipements actifs</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4 text-center">
+            <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold">
+              {equipments.filter(eq => eq.status === 'disponible').length}
+            </p>
+            <p className="text-sm text-gray-600">Disponibles</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4 text-center">
+            <TrendingUp className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold">
+              {formatPrice(equipments.reduce((sum, eq) => sum + (eq.daily_price * 30), 0))}
+            </p>
+            <p className="text-sm text-gray-600">FCFA/mois potentiel</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4 text-center">
+            <CalendarDays className="h-8 w-8 text-orange-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold">
+              {bookings.filter(b => b.userType === 'owner').length}
+            </p>
+            <p className="text-sm text-gray-600">Réservations reçues</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Gestion des équipements */}
+      <div className="space-y-4">
+        {equipments.map(equipment => (
+          <Card key={equipment.id}>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-xl font-semibold">{equipment.title}</h3>
+                  <p className="text-gray-600">{equipment.category} • {equipment.location}</p>
+                  <Badge className={getStatusColor(equipment.status)}>
+                    {getStatusText(equipment.status)}
+                  </Badge>
+                </div>
+                
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-green-600">
+                    {formatPrice(equipment.daily_price)} FCFA/jour
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {formatPrice(equipment.daily_price * 30)} FCFA/mois
+                  </p>
+                </div>
               </div>
-            </div>
-            <Button variant="outline" size="sm">
-              <Settings className="h-4 w-4 mr-1" />
-              Gérer
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Calendrier de disponibilité */}
-      <Card>
-        <CardHeader>
-          <CalendarHeader />
-        </CardHeader>
-        <CardContent>
-          <CalendarGrid />
-        </CardContent>
-      </Card>
+              {/* Actions */}
+              <div className="flex space-x-3">
+                <Dialog open={showPricingModal} onOpenChange={setShowPricingModal}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedEquipment(equipment.id)}
+                    >
+                      <DollarSign className="h-4 w-4 mr-2" />
+                      Tarification
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Gestion de la tarification</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label>Prix journalier actuel</Label>
+                        <Input value={`${formatPrice(equipment.daily_price)} FCFA`} readOnly />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label>Date de début</Label>
+                          <Input 
+                            type="date" 
+                            value={pricingData.startDate}
+                            onChange={(e) => setPricingData({...pricingData, startDate: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <Label>Date de fin</Label>
+                          <Input 
+                            type="date" 
+                            value={pricingData.endDate}
+                            onChange={(e) => setPricingData({...pricingData, endDate: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Prix spécial (FCFA/jour)</Label>
+                        <Input 
+                          type="number" 
+                          placeholder="150000"
+                          value={pricingData.specialPrice}
+                          onChange={(e) => setPricingData({...pricingData, specialPrice: e.target.value})}
+                        />
+                      </div>
+                      <div>
+                        <Label>Raison</Label>
+                        <Input 
+                          placeholder="Ex: Weekend premium, Période de forte demande..."
+                          value={pricingData.reason}
+                          onChange={(e) => setPricingData({...pricingData, reason: e.target.value})}
+                        />
+                      </div>
+                      <div className="bg-orange-50 p-3 rounded-lg">
+                        <div className="flex items-center text-orange-700">
+                          <Percent className="h-4 w-4 mr-2" />
+                          Commission automatique de 5% appliquée sur tous les prix
+                        </div>
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button onClick={() => setShowPricingModal(false)} variant="outline" className="flex-1">
+                          Annuler
+                        </Button>
+                        <Button onClick={handlePricingSubmit} className="flex-1">
+                          Appliquer
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
 
-      {/* Légende */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Légende</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-green-500 rounded"></div>
-              <span className="text-sm">Disponible</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-red-500 rounded"></div>
-              <span className="text-sm">Indisponible</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-orange-500 rounded"></div>
-              <span className="text-sm">Tarif spécial</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-blue-500 rounded"></div>
-              <span className="text-sm">Réservé</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                <Dialog open={showAvailabilityModal} onOpenChange={setShowAvailabilityModal}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedEquipment(equipment.id)}
+                    >
+                      <Calendar className="h-4 w-4 mr-2" />
+                      Disponibilité
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Gestion de la disponibilité</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label>Date de début</Label>
+                          <Input 
+                            type="date" 
+                            value={availabilityData.startDate}
+                            onChange={(e) => setAvailabilityData({...availabilityData, startDate: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <Label>Date de fin</Label>
+                          <Input 
+                            type="date" 
+                            value={availabilityData.endDate}
+                            onChange={(e) => setAvailabilityData({...availabilityData, endDate: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Raison</Label>
+                        <Select 
+                          value={availabilityData.reason} 
+                          onValueChange={(value) => setAvailabilityData({...availabilityData, reason: value})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="maintenance">Maintenance</SelectItem>
+                            <SelectItem value="personal">Usage personnel</SelectItem>
+                            <SelectItem value="repair">Réparation</SelectItem>
+                            <SelectItem value="other">Autre</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Commentaire</Label>
+                        <Textarea 
+                          placeholder="Détails optionnels..."
+                          value={availabilityData.comment}
+                          onChange={(e) => setAvailabilityData({...availabilityData, comment: e.target.value})}
+                        />
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button onClick={() => setShowAvailabilityModal(false)} variant="outline" className="flex-1">
+                          Annuler
+                        </Button>
+                        <Button onClick={handleAvailabilitySubmit} className="flex-1">
+                          Bloquer les dates
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
 
-      {/* Tarifs spéciaux configurés */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Tarifs spéciaux configurés</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div>
-                <h4 className="font-medium">Weekend premium</h4>
-                <p className="text-sm text-gray-600">20-21 Janvier 2025</p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <span className="font-semibold">50,000 FCFA/jour</span>
-                <Button variant="ghost" size="sm">
-                  <Edit3 className="h-4 w-4" />
+                <Button variant="outline" size="sm">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Paramètres
                 </Button>
-                <Button variant="ghost" size="sm">
-                  <Trash2 className="h-4 w-4" />
+                
+                <Button variant="outline" size="sm">
+                  <Eye className="h-4 w-4 mr-2" />
+                  Voir l'annonce
                 </Button>
               </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-
-  const PricingModal = () => showPricingModal && (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Ajouter un tarif spécial</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label>Dates</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Input type="date" />
-              <Input type="date" />
-            </div>
-          </div>
-          
-          <div>
-            <Label>Prix spécial (FCFA/jour)</Label>
-            <Input type="number" placeholder="50000" />
-          </div>
-          
-          <div>
-            <Label>Raison</Label>
-            <Input placeholder="Ex: Weekend premium, Période de forte demande..." />
-          </div>
-          
-          <div className="flex space-x-2">
-            <Button onClick={() => setShowPricingModal(false)} variant="outline" className="flex-1">
-              Annuler
-            </Button>
-            <Button onClick={() => setShowPricingModal(false)} className="flex-1">
-              Ajouter
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        ))}
+        
+        {equipments.length === 0 && (
+          <Card>
+            <CardContent className="p-8 text-center">
+              <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">Aucun équipement trouvé</p>
+              <p className="text-sm text-gray-500">Ajoutez votre premier équipement pour commencer</p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 
@@ -575,7 +920,7 @@ const MyBookings = () => {
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Calendrier de gestion</h1>
         <p className="text-gray-600">
-          Vue globale de vos réservations et gestion de vos équipements
+          Vue globale de vos réservations et gestion de vos équipements avec commission automatique de 5%
         </p>
       </div>
 
@@ -606,9 +951,6 @@ const MyBookings = () => {
         {activeTab === 'bookings' && <BookingsTab />}
         {activeTab === 'equipment' && <EquipmentTab />}
       </div>
-
-      {/* Modal de tarification */}
-      <PricingModal />
     </div>
   );
 };
