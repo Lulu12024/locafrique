@@ -100,10 +100,20 @@ const Index = () => {
   };
 
   const handleCategorySelect = (categoryId: string) => {
-    console.log('Catégorie sélectionnée:', categoryId);
+    console.log('🎯 Catégorie sélectionnée:', categoryId);
     setSelectedCategory(categoryId);
-    // Ici vous pouvez filtrer les équipements par catégorie
-    // ou naviguer vers une page de recherche avec le filtre de catégorie
+    
+    // Filtrer les équipements immédiatement
+    if (cityEquipments.length > 0) {
+      // Filtrer les équipements de la ville actuelle
+      const filtered = cityEquipments.filter(equipment => {
+        if (!categoryId || categoryId === 'all') return true;
+        return equipment.category === categoryId || 
+              equipment.category === categoryId ||
+              equipment.category === categoryId;
+      });
+      setCityEquipments(filtered);
+    }
   };
 
   const handleBackToHome = () => {
@@ -115,6 +125,7 @@ const Index = () => {
 
   const handleCategoryFilter = (categoryId: string) => {
     console.log('Filtrage par catégorie:', categoryId);
+    handleCategorySelect(categoryId);
   };
 
   useEffect(() => {
@@ -133,20 +144,65 @@ const Index = () => {
   const userCountry = getUserCountry();
   
   const groupEquipmentsByCity = (equipments: EquipmentData[]) => {
-    const cities = priorityCities.slice(0, 6); // Prendre les 6 premières villes du pays de l'utilisateur
-    const grouped: { [key: string]: EquipmentData[] } = {};
+    console.log('📊 Groupement des équipements par ville:', equipments.length);
     
-    cities.forEach(city => {
-      grouped[city] = equipments.filter(eq => eq.city === city).slice(0, 6);
-      if (grouped[city].length < 6) {
-        const remaining = equipments.filter(eq => eq.city !== city).slice(0, 6 - grouped[city].length);
-        grouped[city] = [...grouped[city], ...remaining];
+    // Grouper réellement par ville
+    const groupedByCity = equipments.reduce((acc, equipment) => {
+      const city = equipment.city;
+      if (!city) return acc;
+      
+      if (!acc[city]) {
+        acc[city] = [];
+      }
+      acc[city].push(equipment);
+      return acc;
+    }, {} as { [key: string]: EquipmentData[] });
+
+    // Retourner seulement les villes qui ont des équipements
+    const result: { [key: string]: EquipmentData[] } = {};
+    
+    Object.keys(groupedByCity).forEach(city => {
+      if (groupedByCity[city].length > 0) {
+        // Prendre maximum 6 équipements UNIQUES par ville
+        result[city] = groupedByCity[city].slice(0, 6);
+        console.log(`📍 ${city}: ${result[city].length} équipements uniques`);
       }
     });
-    
-    return grouped;
+
+    return result;
   };
 
+  const renderCategoryIndicator = () => {
+    if (!selectedCategory) return null;
+    
+    const categoryName = categories.find(cat => cat.id === selectedCategory)?.name || selectedCategory;
+    
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+        <div className="flex items-center justify-between">
+          <span className="text-green-600 font-medium">
+            🏷️ Catégorie active: {categoryName}
+          </span>
+          <Button
+            onClick={() => {
+              setSelectedCategory(null);
+              // Recharger toutes les données
+              if (selectedCity) {
+                loadCityEquipments(selectedCity);
+              } else {
+                loadData();
+              }
+            }}
+            variant="ghost"
+            size="sm"
+            className="text-green-600"
+          >
+            ✕ Tout afficher
+          </Button>
+        </div>
+      </div>
+    );
+  };
   const equipmentsByCity = !isMobile ? groupEquipmentsByCity(featuredEquipments) : {};
 
   // Si une ville est sélectionnée, afficher ses équipements
