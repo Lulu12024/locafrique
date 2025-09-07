@@ -1,3 +1,6 @@
+// CRÉER le fichier: src/components/ui/checkbox.tsx
+// SI LE COMPOSANT CHECKBOX N'EXISTE PAS
+
 import * as React from "react"
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
 import { Check } from "lucide-react"
