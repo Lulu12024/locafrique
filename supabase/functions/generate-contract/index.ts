@@ -38,11 +38,7 @@ serve(async (req) => {
     console.log("🔍 Récupération des données de réservation...");
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
-      .select(`
-        *,
-        equipment:equipments(*),
-        renter:profiles!renter_id(*)
-      `)
+      .select('*')
       .eq('id', booking_id)
       .single()
 
@@ -56,15 +52,41 @@ serve(async (req) => {
     }
 
     console.log("✅ Réservation trouvée:", booking.id);
-    console.log("🏠 Équipement:", booking.equipment?.title);
-    console.log("👤 Locataire:", booking.renter?.first_name, booking.renter?.last_name);
 
-    // Get owner profile from equipment
+    // ✅ ÉTAPE 2: Récupérer l'équipement
+    const { data: equipment, error: equipmentError } = await supabaseAdmin
+      .from('equipments')
+      .select('*')
+      .eq('id', booking.equipment_id)
+      .single()
+
+    if (equipmentError) {
+      console.error("❌ Erreur récupération équipement:", equipmentError);
+      throw equipmentError;
+    }
+
+    console.log("🏠 Équipement:", equipment?.title);
+
+    // ✅ ÉTAPE 3: Récupérer le locataire
+    const { data: renter, error: renterError } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', booking.renter_id)
+      .single()
+
+    if (renterError) {
+      console.error("❌ Erreur récupération locataire:", renterError);
+      throw renterError;
+    }
+
+    console.log("👤 Locataire:", renter?.first_name, renter?.last_name);
+
+    // ✅ ÉTAPE 4: Récupérer le propriétaire
     console.log("🔍 Récupération du propriétaire...");
     const { data: ownerProfile, error: ownerError } = await supabaseAdmin
       .from('profiles')
       .select('*')
-      .eq('id', booking.equipment.owner_id)
+      .eq('id', equipment.owner_id)
       .single()
 
     if (ownerError) {
@@ -74,6 +96,12 @@ serve(async (req) => {
 
     console.log("✅ Propriétaire trouvé:", ownerProfile?.first_name, ownerProfile?.last_name);
 
+    // ✅ ÉTAPE 5: Assembler les données complètes
+    const bookingComplete = {
+      ...booking,
+      equipment: equipment,
+      renter: renter
+    };
     // Generate PDF contract
     console.log("📄 Génération du PDF...");
     const doc = new jsPDF()

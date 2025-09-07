@@ -23,24 +23,10 @@ export function useEquipmentDetail() {
         return { equipment: null, owner: null };
       }
       
-      // Single query to get equipment with owner data
+      // ✅ ÉTAPE 1: Récupérer l'équipement de base
       const { data: equipmentData, error: equipmentError } = await supabase
         .from('equipments')
-        .select(`
-          *,
-          images:equipment_images (*),
-          owner:profiles!equipments_owner_id_fkey (
-            id,
-            first_name,
-            last_name,
-            avatar_url,
-            city,
-            country,
-            phone_number,
-            created_at,
-            user_type
-          )
-        `)
+        .select('*')
         .eq('id', id)
         .maybeSingle();
       
@@ -53,22 +39,55 @@ export function useEquipmentDetail() {
         console.error("❌ Équipement non trouvé pour l'ID:", id);
         return { equipment: null, owner: null };
       }
+
+      // ✅ ÉTAPE 2: Récupérer les images de l'équipement
+      const { data: images, error: imagesError } = await supabase
+        .from('equipment_images')
+        .select('*')
+        .eq('equipment_id', id);
+
+      if (imagesError) {
+        console.error("❌ Erreur images:", imagesError);
+        // Ne pas faire échouer, continuer sans images
+      }
+
+      // ✅ ÉTAPE 3: Récupérer le propriétaire
+      const { data: ownerData, error: ownerError } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          avatar_url,
+          city,
+          country,
+          phone_number,
+          created_at,
+          user_type
+        `)
+        .eq('id', equipmentData.owner_id)
+        .maybeSingle();
+
+      if (ownerError) {
+        console.error("❌ Erreur propriétaire:", ownerError);
+        // Ne pas faire échouer, continuer sans propriétaire
+      }
       
       console.log("✅ Équipement récupéré:", equipmentData.title);
       
-      // Transform data to match expected types
+      // ✅ ÉTAPE 4: Transformer les données
       const transformedEquipment: EquipmentData = {
         ...equipmentData,
-        images: Array.isArray(equipmentData.images) ? equipmentData.images : [],
-        owner: equipmentData.owner ? {
-          ...equipmentData.owner,
-          user_type: equipmentData.owner.user_type || 'proprietaire'
+        images: Array.isArray(images) ? images : [],
+        owner: ownerData ? {
+          ...ownerData,
+          user_type: ownerData.user_type || 'proprietaire'
         } as ProfileData : undefined
       };
       
-      const owner = equipmentData.owner ? {
-        ...equipmentData.owner,
-        user_type: equipmentData.owner.user_type || 'proprietaire'
+      const owner = ownerData ? {
+        ...ownerData,
+        user_type: ownerData.user_type || 'proprietaire'
       } as ProfileData : null;
       
       return { 

@@ -132,45 +132,98 @@ export const downloadContract = (pdfBase64: string, filename: string): void => {
 // Function to get booking with full details for contract
 export const getBookingForContract = async (bookingId: string): Promise<BookingData | null> => {
   try {
-    const { data, error } = await supabase
+    console.log('🔍 Récupération booking pour contrat:', bookingId);
+    
+    // ✅ ÉTAPE 1: Récupérer le booking de base
+    const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .select(`
-        *,
-        equipment:equipments(
-          *,
-          images:equipment_images(*),
-          owner:profiles!equipments_owner_id_fkey(*)
-        ),
-        renter:profiles!renter_id(*)
-      `)
+      .select('*')
       .eq('id', bookingId)
       .single();
     
-    if (error) throw error;
+    if (bookingError) {
+      console.error('❌ Erreur booking:', bookingError);
+      throw bookingError;
+    }
+
+    if (!booking) {
+      console.error('❌ Booking non trouvé');
+      return null;
+    }
+
+    // ✅ ÉTAPE 2: Récupérer l'équipement
+    const { data: equipment, error: equipmentError } = await supabase
+      .from('equipments')
+      .select('*')
+      .eq('id', booking.equipment_id)
+      .single();
     
-    // Transform the data to match BookingData type with proper type assertions
+    if (equipmentError) {
+      console.error('❌ Erreur équipement:', equipmentError);
+      throw equipmentError;
+    }
+
+    // ✅ ÉTAPE 3: Récupérer les images de l'équipement
+    const { data: images, error: imagesError } = await supabase
+      .from('equipment_images')
+      .select('*')
+      .eq('equipment_id', booking.equipment_id);
+
+    if (imagesError) {
+      console.error('❌ Erreur images:', imagesError);
+      // Ne pas faire échouer, continuer sans images
+    }
+
+    // ✅ ÉTAPE 4: Récupérer le propriétaire (owner)
+    const { data: owner, error: ownerError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', equipment.owner_id)
+      .single();
+
+    if (ownerError) {
+      console.error('❌ Erreur propriétaire:', ownerError);
+      throw ownerError;
+    }
+
+    // ✅ ÉTAPE 5: Récupérer le locataire (renter)
+    const { data: renter, error: renterError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', booking.renter_id)
+      .single();
+
+    if (renterError) {
+      console.error('❌ Erreur locataire:', renterError);
+      throw renterError;
+    }
+
+    // ✅ ÉTAPE 6: Transformer et combiner toutes les données
     const transformedData: BookingData = {
-      ...data,
-      equipment: data.equipment ? {
-        ...data.equipment,
-        owner: data.equipment.owner ? {
-          ...data.equipment.owner,
-          user_type: data.equipment.owner.user_type as 'locataire' | 'proprietaire'
+      ...booking,
+      equipment: equipment ? {
+        ...equipment,
+        images: images || [],
+        owner: owner ? {
+          ...owner,
+          user_type: owner.user_type as 'locataire' | 'proprietaire'
         } : undefined
       } : undefined,
-      owner: data.equipment?.owner ? {
-        ...data.equipment.owner,
-        user_type: data.equipment.owner.user_type as 'locataire' | 'proprietaire'
+      owner: owner ? {
+        ...owner,
+        user_type: owner.user_type as 'locataire' | 'proprietaire'
       } : undefined,
-      renter: data.renter ? {
-        ...data.renter,
-        user_type: data.renter.user_type as 'locataire' | 'proprietaire'
+      renter: renter ? {
+        ...renter,
+        user_type: renter.user_type as 'locataire' | 'proprietaire'
       } : undefined
     };
     
+    console.log('✅ Booking complet récupéré pour contrat');
     return transformedData;
+    
   } catch (error) {
-    console.error("Erreur lors de la récupération de la réservation:", error);
+    console.error("❌ Erreur lors de la récupération de la réservation:", error);
     return null;
   }
 };
