@@ -1,17 +1,13 @@
-
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/auth";
 import { useRenterBookings } from "./bookings/useRenterBookings";
 import { useOwnerBookings } from "./bookings/useOwnerBookings";
 
 export const useBookings = () => {
   const { user } = useAuth();
-  const renterBookingsHook = useRenterBookings(user?.id);
-  const { 
-    fetchOwnerBookings, 
-    updateBookingStatus 
-  } = useOwnerBookings();
+  
+  // ✅ Utilisation correcte des hooks sans paramètres
+  const renterBookingsHook = useRenterBookings();
+  const ownerBookingsHook = useOwnerBookings();
 
   // Fetch all bookings for a user (both as renter and owner)
   const fetchUserBookings = async (userId: string) => {
@@ -22,7 +18,7 @@ export const useBookings = () => {
     try {
       const [renterBookings, ownerBookings] = await Promise.all([
         renterBookingsHook.fetchRenterBookings(userId),
-        fetchOwnerBookings(userId)
+        ownerBookingsHook.fetchOwnerBookings(userId)
       ]);
 
       return {
@@ -41,11 +37,19 @@ export const useBookings = () => {
   return {
     // Booking fetch functions
     fetchRenterBookings: renterBookingsHook.fetchRenterBookings,
-    fetchOwnerBookings,
+    fetchOwnerBookings: ownerBookingsHook.fetchOwnerBookings,
     fetchUserBookings,
     
     // Booking actions
     cancelBooking: renterBookingsHook.cancelBooking,
-    updateBookingStatus,
+    updateBookingStatus: ownerBookingsHook.updateBookingStatus,
+    
+    // Queries (pour compatibilité)
+    useRenterBookingsQuery: renterBookingsHook.useRenterBookingsQuery,
+    useOwnerBookingsQuery: ownerBookingsHook.useOwnerBookingsQuery,
+    
+    // Mutations (pour compatibilité)
+    useCancelBookingMutation: renterBookingsHook.useCancelBookingMutation,
+    useUpdateBookingStatusMutation: ownerBookingsHook.useUpdateBookingStatusMutation,
   };
 };

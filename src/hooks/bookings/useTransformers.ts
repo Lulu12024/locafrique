@@ -1,4 +1,3 @@
-
 import { BookingStatus, EquipmentData, OwnerBooking, OwnerData, RenterBooking, normalizeBookingStatus } from "./types";
 
 export const useTransformers = () => {
@@ -44,10 +43,9 @@ export const useTransformers = () => {
         images: { error: true, message: "No images available" }
       };
 
-      // Owner data transformation
+      // Owner data transformation (✅ Supprimé 'email')
       const owner: OwnerData = booking.owner ? {
         id: booking.owner.id || '',
-        email: booking.owner.email,
         first_name: booking.owner.first_name,
         last_name: booking.owner.last_name,
         phone_number: booking.owner.phone_number,
@@ -125,10 +123,9 @@ export const useTransformers = () => {
         images: { error: true, message: "No images available" }
       };
 
-      // Renter data transformation
+      // Renter data transformation (✅ Supprimé 'email')
       const renter: OwnerData = booking.renter ? {
         id: booking.renter.id || '',
-        email: booking.renter.email,
         first_name: booking.renter.first_name,
         last_name: booking.renter.last_name,
         phone_number: booking.renter.phone_number,

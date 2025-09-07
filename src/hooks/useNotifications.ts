@@ -1,10 +1,9 @@
-// CRÉER le fichier : /src/hooks/useNotifications.ts
 // Hook pour la gestion automatique des notifications avec vraies données
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/auth';
+import { useAuth } from '@/hooks/auth/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 
 // Interface pour les notifications
 interface NotificationData {
@@ -79,11 +78,11 @@ export function useNotifications() {
     }
   });
 
-  // Charger les notifications
+  // Charger les notifications au montage
   useEffect(() => {
     if (user?.id) {
       loadNotifications();
-      setupRealtimeSubscription();
+      // ✅ SUPPRIMÉ: setupRealtimeSubscription() - sera géré par NotificationSystem
     }
   }, [user?.id]);
 
@@ -124,47 +123,8 @@ export function useNotifications() {
     }
   };
 
-  // Configuration de l'écoute en temps réel
-  const setupRealtimeSubscription = () => {
-    if (!user?.id) return;
-
-    console.log('🔄 Configuration de l\'écoute temps réel des notifications...');
-    
-    const subscription = supabase
-      .channel('notifications')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('🔔 Nouvelle notification reçue:', payload.new);
-          
-          const newNotification = payload.new as NotificationData;
-          
-          // Ajouter à la liste
-          setNotifications(prev => [newNotification, ...prev]);
-          setUnreadCount(prev => prev + 1);
-          
-          // Afficher un toast pour les notifications importantes
-          if (settings.push[newNotification.type as keyof typeof settings.push]) {
-            toast({
-              title: newNotification.title,
-              description: newNotification.message,
-            });
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      console.log('🔇 Arrêt de l\'écoute temps réel');
-      subscription.unsubscribe();
-    };
-  };
+  // ✅ FONCTION SUPPRIMÉE: setupRealtimeSubscription
+  // La souscription en temps réel sera gérée par le composant NotificationSystem
 
   // Créer une nouvelle notification
   const createNotification = async (
@@ -306,12 +266,11 @@ export function useNotifications() {
       }
 
       // Mettre à jour localement
-      const notification = notifications.find(n => n.id === notificationId);
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
-      
-      if (notification && !notification.read) {
-        setUnreadCount(prev => Math.max(0, prev - 1));
-      }
+      setUnreadCount(prev => {
+        const deletedNotif = notifications.find(n => n.id === notificationId);
+        return deletedNotif && !deletedNotif.read ? Math.max(0, prev - 1) : prev;
+      });
       
     } catch (error) {
       console.error('❌ Erreur lors de la suppression:', error);
@@ -323,24 +282,24 @@ export function useNotifications() {
     }
   };
 
-  // Notifications prédéfinies pour le système de réservation
+  // Templates de notifications
   const notificationTemplates = {
     newBooking: (renterName: string, equipmentTitle: string, dates: string) => ({
       type: 'new_booking',
       title: 'Nouvelle demande de réservation',
-      message: `${renterName} souhaite réserver "${equipmentTitle}" ${dates}. Commission automatique de 5% appliquée.`
+      message: `${renterName} souhaite réserver "${equipmentTitle}" du ${dates}.`
     }),
     
     bookingConfirmed: (equipmentTitle: string, ownerName: string) => ({
       type: 'booking_confirmed',
       title: 'Réservation confirmée',
-      message: `Votre réservation pour "${equipmentTitle}" a été confirmée par ${ownerName}.`
+      message: `${ownerName} a confirmé votre réservation pour "${equipmentTitle}".`
     }),
     
     paymentReceived: (amount: number, commission: number) => ({
       type: 'payment_received',
       title: 'Paiement reçu',
-      message: `Vous avez reçu ${amount.toLocaleString()} FCFA. Commission: ${commission.toLocaleString()} FCFA (5%).`
+      message: `Vous avez reçu un paiement de ${amount.toLocaleString()} FCFA. Commission: ${commission.toLocaleString()} FCFA (5%).`
     }),
     
     bookingCancelled: (equipmentTitle: string, reason?: string) => ({
@@ -389,6 +348,14 @@ export function useNotifications() {
     console.log('⚙️ Paramètres de notification mis à jour:', newSettings);
   };
 
+  // ✅ Fonction pour mettre à jour les notifications depuis l'extérieur (appelée par NotificationSystem)
+  const addNotification = (notification: NotificationData) => {
+    setNotifications(prev => [notification, ...prev]);
+    if (!notification.read) {
+      setUnreadCount(prev => prev + 1);
+    }
+  };
+
   return {
     // États
     notifications,
@@ -404,6 +371,7 @@ export function useNotifications() {
     markAllAsRead,
     deleteNotification,
     updateSettings,
+    addNotification, // ✅ Nouvelle fonction pour ajouter des notifications
     
     // Helpers pour les notifications spécifiques
     notifyNewBooking,

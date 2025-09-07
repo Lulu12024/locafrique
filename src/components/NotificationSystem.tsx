@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/auth/useAuth';
 
 export function NotificationSystem() {
   const { user } = useAuth();
-  const { notifications, refetch } = useNotifications();
+  const { notifications, loadNotifications } = useNotifications(); // ✅ Changé refetch en loadNotifications
   const { sendLocalNotification, isNative } = useMobileNotifications();
 
   useEffect(() => {
@@ -56,14 +56,12 @@ export function NotificationSystem() {
             }
             
             // Rafraîchir la liste des notifications
-            refetch();
+            loadNotifications(); // ✅ Changé refetch() en loadNotifications()
           }
         );
 
-      // Seulement s'abonner si on n'est pas en environnement de test
-      if (typeof window !== 'undefined' && !window.location.href.includes('test')) {
-        channel.subscribe();
-      }
+      // S'abonner au channel
+      channel.subscribe();
 
       return () => {
         try {
@@ -75,7 +73,7 @@ export function NotificationSystem() {
     } catch (error) {
       console.log('Erreur lors de la configuration des notifications en temps réel:', error);
     }
-  }, [user?.id, refetch, sendLocalNotification, isNative]);
+  }, [user?.id, loadNotifications, sendLocalNotification, isNative]); // ✅ Changé refetch en loadNotifications dans les dépendances
 
   // Ce composant ne rend rien visuellement, il gère seulement les notifications
   return null;
