@@ -28,6 +28,7 @@ import MyWallet from "./pages/MyWallet";
 import MyHistory from "./pages/MyHistory";
 import MySettings from "./pages/MySettings";
 import PaymentSuccess from "./pages/PaymentSuccess";
+import WalletRechargeSuccess from '@/pages/WalletRechargeSuccess';
 
 function App() {
   return (
@@ -50,7 +51,7 @@ function App() {
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/payment-success" element={<PaymentSuccess />} />
           <Route path="*" element={<NotFound />} />
-          
+          <Route path="/wallet-recharge-success" element={<WalletRechargeSuccess />} />
           {/* Protected Routes */}
           <Route element={<RequireAuth />}>
             <Route path="/overview" element={<Overview />} />

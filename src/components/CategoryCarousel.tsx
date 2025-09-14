@@ -1,5 +1,5 @@
 // src/components/CategoryCarousel.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useCategories } from "@/hooks/useCategories";
@@ -24,7 +24,9 @@ import {
   Flower,
   Package,
   Construction,
-  Tractor
+  Tractor,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 // Mapping des icônes
@@ -205,9 +207,79 @@ const CategoryCarousel: React.FC<CategoryCarouselProps> = ({
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // États pour le carrousel
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number>(0);
+  const touchEndX = useRef<number>(0);
 
   // Utiliser les catégories corrigées comme fallback
   const fallbackCategories = getCorrectedCategories();
+
+  // Calcul des éléments visibles selon la taille d'écran
+  const getVisibleItems = () => {
+    if (typeof window === 'undefined') return 4;
+    if (window.innerWidth < 640) return 2; // mobile
+    if (window.innerWidth < 768) return 3; // sm
+    if (window.innerWidth < 1024) return 4; // md
+    if (window.innerWidth < 1280) return 5; // lg
+    return 6; // xl et plus
+  };
+
+  const [visibleItems, setVisibleItems] = useState(getVisibleItems);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setVisibleItems(getVisibleItems());
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Calcul de l'index maximum
+  const maxIndex = Math.max(0, categories.length - visibleItems);
+
+  // Navigation functions
+  const goToPrevious = () => {
+    if (isTransitioning || currentIndex === 0) return;
+    setIsTransitioning(true);
+    setCurrentIndex(prev => prev - 1);
+    setTimeout(() => setIsTransitioning(false), 300);
+  };
+
+  const goToNext = () => {
+    if (isTransitioning || currentIndex >= maxIndex) return;
+    setIsTransitioning(true);
+    setCurrentIndex(prev => prev + 1);
+    setTimeout(() => setIsTransitioning(false), 300);
+  };
+
+  // Touch handlers pour le swipe mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+    
+    const distance = touchStartX.current - touchEndX.current;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+
+    if (isLeftSwipe && currentIndex < maxIndex) {
+      goToNext();
+    }
+    if (isRightSwipe && currentIndex > 0) {
+      goToPrevious();
+    }
+  };
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -291,69 +363,168 @@ const CategoryCarousel: React.FC<CategoryCarouselProps> = ({
     );
   }
 
-  // RENDU PRINCIPAL - LAYOUT CENTRÉ ET RESPONSIVE
+  // Si pas assez de catégories pour justifier un carrousel, utiliser le layout centré original
+  if (categories.length <= visibleItems) {
+    return (
+      <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200 sticky top-16 z-45 py-4 shadow-sm transition-all duration-300">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex justify-center items-center">
+            <div className={cn(
+              "grid gap-3 w-full",
+              categories.length <= 3 ? "grid-cols-3 max-w-md" :
+              categories.length <= 4 ? "grid-cols-4 max-w-2xl" :
+              categories.length <= 5 ? "grid-cols-5 max-w-3xl" :
+              "grid-cols-6 max-w-4xl",
+              "sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+            )}>
+              {categories.map((category) => (
+                <Button
+                  key={category.id}
+                  variant={selectedCategory === category.id ? "default" : "ghost"}
+                  className={cn(
+                    "h-16 flex flex-col items-center justify-center space-y-1 px-3 py-2 rounded-lg transition-all duration-200 text-center",
+                    selectedCategory === category.id
+                      ? "bg-green-600 text-white shadow-lg scale-105 border-2 border-green-700"
+                      : "hover:bg-green-50 hover:scale-102 hover:border-green-200 border border-gray-200 hover:shadow-md"
+                  )}
+                  onClick={() => handleCategoryClick(category.id)}
+                >
+                  <CategoryIcon 
+                    iconName={category.icon} 
+                    className={cn(
+                      "h-5 w-5 transition-colors",
+                      selectedCategory === category.id ? "text-white" : "text-green-600"
+                    )} 
+                  />
+                  <span className="text-xs font-medium text-center leading-tight max-w-full truncate">
+                    {category.name}
+                  </span>
+                  {category.count && (
+                    <span className="text-xs opacity-75">
+                      {category.count}
+                    </span>
+                  )}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // RENDU PRINCIPAL - CARROUSEL HORIZONTAL
   return (
     <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200 sticky top-16 z-45 py-4 shadow-sm transition-all duration-300">
       <div className="max-w-7xl mx-auto px-4">
         
-        {/* Conteneur centré qui s'adapte au nombre de catégories */}
-        <div className="flex justify-center items-center">
-          <div className={cn(
-            "grid gap-3 w-full",
-            // ADAPTATION DYNAMIQUE selon le nombre de catégories
-            categories.length <= 3 ? "grid-cols-3 max-w-md" :
-            categories.length <= 4 ? "grid-cols-4 max-w-2xl" :
-            categories.length <= 5 ? "grid-cols-5 max-w-3xl" :
-            categories.length <= 6 ? "grid-cols-6 max-w-4xl" :
-            "grid-cols-6 max-w-5xl", // Si plus de 6, on garde 6 colonnes
-            // RESPONSIVE - Sur mobile, adaptation automatique
-            "sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-          )}>
-            
-            {categories.map((category) => (
-              <Button
-                key={category.id}
-                variant={selectedCategory === category.id ? "default" : "ghost"}
-                className={cn(
-                  "h-16 flex flex-col items-center justify-center space-y-1 px-3 py-2 rounded-lg transition-all duration-200 text-center",
-                  selectedCategory === category.id
-                    ? "bg-green-600 text-white shadow-lg scale-105 border-2 border-green-700"
-                    : "hover:bg-green-50 hover:scale-102 hover:border-green-200 border border-gray-200 hover:shadow-md"
-                )}
-                onClick={() => handleCategoryClick(category.id)}
-              >
-                {/* Icône avec couleur adaptative */}
-                <CategoryIcon 
-                  iconName={category.icon} 
-                  className={cn(
-                    "h-5 w-5 transition-colors",
-                    selectedCategory === category.id ? "text-white" : "text-green-600"
-                  )} 
-                />
-                
-                {/* Nom de la catégorie */}
-                <span className="text-xs font-medium text-center leading-tight max-w-full truncate">
-                  {category.name}
-                </span>
-                
-                {/* Compteur optionnel */}
-                {category.count && (
-                  <span className="text-xs opacity-75">
-                    {category.count}
-                  </span>
-                )}
-              </Button>
-            ))}
-            
+        {/* Container du carrousel avec navigation */}
+        <div className="relative flex items-center">
+          
+          {/* Bouton Précédent */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "absolute left-0 z-10 bg-white/90 backdrop-blur-sm shadow-md border border-gray-200 hover:bg-white hover:shadow-lg transition-all duration-200 flex-shrink-0",
+              currentIndex === 0 ? "opacity-50 cursor-not-allowed" : "hover:scale-105"
+            )}
+            onClick={goToPrevious}
+            disabled={isTransitioning || currentIndex === 0}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+
+          {/* Bouton Suivant */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "absolute right-0 z-10 bg-white/90 backdrop-blur-sm shadow-md border border-gray-200 hover:bg-white hover:shadow-lg transition-all duration-200 flex-shrink-0",
+              currentIndex >= maxIndex ? "opacity-50 cursor-not-allowed" : "hover:scale-105"
+            )}
+            onClick={goToNext}
+            disabled={isTransitioning || currentIndex >= maxIndex}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+
+          {/* Container des catégories avec overflow */}
+          <div className="overflow-hidden mx-10 w-full">
+            <div
+              ref={carouselRef}
+              className="flex transition-transform duration-300 ease-in-out"
+              style={{
+                transform: `translateX(-${currentIndex * (100 / visibleItems)}%)`,
+              }}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              {categories.map((category) => (
+                <div
+                  key={category.id}
+                  className="flex-none px-1"
+                  style={{ width: `${100 / visibleItems}%` }}
+                >
+                  <Button
+                    variant={selectedCategory === category.id ? "default" : "ghost"}
+                    className={cn(
+                      "h-16 w-full flex flex-col items-center justify-center space-y-1 px-2 py-2 rounded-lg transition-all duration-200 text-center",
+                      selectedCategory === category.id
+                        ? "bg-green-600 text-white shadow-lg scale-105 border-2 border-green-700"
+                        : "hover:bg-green-50 hover:scale-102 hover:border-green-200 border border-gray-200 hover:shadow-md"
+                    )}
+                    onClick={() => handleCategoryClick(category.id)}
+                  >
+                    {/* Icône avec couleur adaptative */}
+                    <CategoryIcon 
+                      iconName={category.icon} 
+                      className={cn(
+                        "h-5 w-5 transition-colors",
+                        selectedCategory === category.id ? "text-white" : "text-green-600"
+                      )} 
+                    />
+                    
+                    {/* Nom de la catégorie */}
+                    <span className="text-xs font-medium text-center leading-tight max-w-full truncate">
+                      {category.name}
+                    </span>
+                    
+                    {/* Compteur optionnel */}
+                    {category.count && (
+                      <span className="text-xs opacity-75">
+                        {category.count}
+                      </span>
+                    )}
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-        
-        {/* Indicateur de scroll si nécessaire */}
-        {categories.length > 6 && (
-          <div className="flex justify-center mt-2">
-            <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-              Glissez pour voir plus →
-            </div>
+
+        {/* Indicateurs de position */}
+        {maxIndex > 0 && (
+          <div className="flex justify-center mt-3 space-x-1">
+            {Array.from({ length: maxIndex + 1 }, (_, index) => (
+              <button
+                key={index}
+                className={cn(
+                  "w-1.5 h-1.5 rounded-full transition-all duration-200",
+                  index === currentIndex 
+                    ? "bg-green-600 w-6" 
+                    : "bg-gray-300 hover:bg-gray-400"
+                )}
+                onClick={() => {
+                  if (!isTransitioning) {
+                    setIsTransitioning(true);
+                    setCurrentIndex(index);
+                    setTimeout(() => setIsTransitioning(false), 300);
+                  }
+                }}
+              />
+            ))}
           </div>
         )}
         
@@ -362,5 +533,5 @@ const CategoryCarousel: React.FC<CategoryCarouselProps> = ({
   );
 };
 
-// EXPORT PAR DÉFAUT - CORRECTION DE L'ERREUR D'IMPORT
+// EXPORT PAR DÉFAUT
 export default CategoryCarousel;

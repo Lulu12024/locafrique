@@ -1,5 +1,5 @@
 // REMPLACER COMPLÈTEMENT le fichier : src/components/booking/ReservationModal.tsx
-// VERSION AVEC SÉLECTEUR DE DATES INTERACTIF
+// VERSION AVEC SÉLECTEUR DE DATES INTERACTIF ET INTÉGRATION KKIAPAY
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -196,10 +196,17 @@ function ReservationModal({
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
-  const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [modalMode, setModalMode] = useState<'reservation' | 'recharge'>('reservation');
   const [paymentMethod, setPaymentMethod] = useState<'wallet' | 'card'>('wallet');
   const [isStartDateOpen, setIsStartDateOpen] = useState(false);
   const [isEndDateOpen, setIsEndDateOpen] = useState(false);
+  
+  // États pour la recharge
+  const [rechargeAmount, setRechargeAmount] = useState('');
+  const [isRecharging, setIsRecharging] = useState(false);
+  
+  // Montants rapides pour la recharge
+  const quickAmounts = [10000, 25000, 50000, 100000, 200000];
   
   // États pour les détails de réservation
   const [reservationDetails, setReservationDetails] = useState({
@@ -250,6 +257,88 @@ function ReservationModal({
 
   // Vérifier si le solde est suffisant
   const isSufficientBalance = walletBalance >= calculatedTotal;
+
+  // Gestion de la recharge Kkiapay
+  const handleKkiapayRecharge = async () => {
+    const amount = Number(rechargeAmount);
+    
+    if (!amount || amount < 1000) {
+      toast({
+        title: "Montant invalide",
+        description: "Le montant minimum est de 1000 FCFA.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (amount > 1000000) {
+      toast({
+        title: "Montant trop élevé",
+        description: "Le montant maximum est de 1 000 000 FCFA.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsRecharging(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('create-kakiapay-recharge', {
+        body: {
+          amount: amount,
+          payment_method: 'kakiapay',
+          currency: 'xof'
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.checkout_url) {
+        // Ouvrir Kkiapay dans un nouvel onglet
+        window.open(data.checkout_url, '_blank');
+        
+        toast({
+          title: "Redirection vers Kkiapay",
+          description: "Vous allez être redirigé vers Kkiapay pour le paiement",
+        });
+        
+        setModalMode('reservation');
+        setRechargeAmount('');
+        
+        // Recharger le solde après un délai
+        setTimeout(() => {
+          loadWalletBalance();
+        }, 5000);
+      }
+    } catch (error: any) {
+      console.error('Erreur recharge Kkiapay:', error);
+      toast({
+        title: "Erreur recharge",
+        description: error.message || "Une erreur s'est produite",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRecharging(false);
+    }
+  };
+
+  const handleQuickAmount = (amount: number) => {
+    setRechargeAmount(amount.toString());
+  };
+
+  const formatRechargeAmount = (value: string) => {
+    // Supprimer tous les caractères non numériques
+    const numericValue = value.replace(/[^\d]/g, '');
+    
+    // Convertir en nombre et formater avec des espaces
+    const number = parseInt(numericValue) || 0;
+    return number.toLocaleString('fr-FR');
+  };
+
+  const handleRechargeAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/[^\d]/g, '');
+    setRechargeAmount(value);
+  };
 
   // Gestion des changements d'input
   const handleInputChange = (field: string, value: any) => {
@@ -511,475 +600,574 @@ function ReservationModal({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-[800px] max-h-[95vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="bg-gradient-to-r from-emerald-600 to-blue-600 p-6 text-white rounded-t-lg -mx-6 -mt-6 mb-6">
-              <DialogTitle className="text-2xl font-bold flex items-center">
-                <Zap className="mr-3 h-6 w-6" />
-                Réservation Express
-              </DialogTitle>
-              <p className="text-emerald-100 text-sm mt-1">{validEquipment.title}</p>
-              
-              {/* Indicateur de progression */}
-              <div className="flex items-center justify-between mt-6">
-                {[1, 2, 3, 4, 5].map((step) => (
-                  <div key={step} className="flex items-center">
-                    <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all",
-                      currentStep >= step 
-                        ? "bg-white text-emerald-600 shadow-lg" 
-                        : "bg-emerald-400 text-white"
-                    )}>
-                      {currentStep > step ? <CheckCircle className="h-6 w-6" /> : step}
-                    </div>
-                    {step < 5 && (
+      {/* Modal principal de réservation */}
+      {modalMode === 'reservation' && (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+          <DialogContent className="sm:max-w-[800px] max-h-[95vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="bg-gradient-to-r from-emerald-600 to-blue-600 p-6 text-white rounded-t-lg -mx-6 -mt-6 mb-6">
+                <DialogTitle className="text-2xl font-bold flex items-center">
+                  <Zap className="mr-3 h-6 w-6" />
+                  Réservation Express
+                </DialogTitle>
+                <p className="text-emerald-100 text-sm mt-1">{validEquipment.title}</p>
+                
+                {/* Indicateur de progression */}
+                <div className="flex items-center justify-between mt-6">
+                  {[1, 2, 3, 4, 5].map((step) => (
+                    <div key={step} className="flex items-center">
                       <div className={cn(
-                        "w-16 h-1 mx-2 transition-all",
-                        currentStep > step ? "bg-white" : "bg-emerald-400"
-                      )} />
+                        "w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all",
+                        currentStep >= step 
+                          ? "bg-white text-emerald-600 shadow-lg" 
+                          : "bg-emerald-400 text-white"
+                      )}>
+                        {currentStep > step ? <CheckCircle className="h-6 w-6" /> : step}
+                      </div>
+                      {step < 5 && (
+                        <div className={cn(
+                          "w-16 h-1 mx-2 transition-all",
+                          currentStep > step ? "bg-white" : "bg-emerald-400"
+                        )} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </DialogHeader>
+
+            {/* Corps du modal */}
+            <div className="space-y-6">
+              {/* Étape 1: Sélection des dates */}
+              {currentStep === 1 && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold mb-4">Choisissez vos dates</h3>
+                    
+                    {/* Sélecteurs de dates */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      {/* Date de début */}
+                      <div className="space-y-2">
+                        <Label>Date de début</Label>
+                        <Popover open={isStartDateOpen} onOpenChange={setIsStartDateOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start text-left font-normal"
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {safeFormatDate(selectedStartDate, 'long')}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={selectedStartDate}
+                              onSelect={handleStartDateChange}
+                              disabled={(date) => date < new Date()}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      {/* Date de fin */}
+                      <div className="space-y-2">
+                        <Label>Date de fin</Label>
+                        <Popover open={isEndDateOpen} onOpenChange={setIsEndDateOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start text-left font-normal"
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {safeFormatDate(selectedEndDate, 'long')}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={selectedEndDate}
+                              onSelect={handleEndDateChange}
+                              disabled={(date) => date <= selectedStartDate}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+
+                    {/* Résumé de la période */}
+                    <Card className="bg-blue-50 border-blue-200">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-center space-x-4">
+                          <div className="text-center">
+                            <p className="text-sm text-blue-600">Durée</p>
+                            <p className="font-bold text-blue-800">
+                              {calculateDays(selectedStartDate, selectedEndDate)} jour{calculateDays(selectedStartDate, selectedEndDate) > 1 ? 's' : ''}
+                            </p>
+                          </div>
+                          <div className="w-px h-8 bg-blue-300" />
+                          <div className="text-center">
+                            <p className="text-sm text-blue-600">Prix journalier</p>
+                            <p className="font-bold text-blue-800">
+                              {safeToLocaleString(validEquipment.daily_price)} FCFA
+                            </p>
+                          </div>
+                          <div className="w-px h-8 bg-blue-300" />
+                          <div className="text-center">
+                            <p className="text-sm text-blue-600">Total</p>
+                            <p className="text-xl font-bold text-green-600">
+                              {safeToLocaleString(calculatedTotal)} FCFA
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Information sur le prix hebdomadaire si applicable */}
+                    {validEquipment.weekly_price > 0 && calculateDays(selectedStartDate, selectedEndDate) >= 7 && (
+                      <Alert className="border-green-200 bg-green-50">
+                        <Calculator className="h-4 w-4 text-green-600" />
+                        <AlertDescription className="text-green-700">
+                          <strong>Prix hebdomadaire appliqué !</strong> Vous économisez par rapport au tarif journalier.
+                        </AlertDescription>
+                      </Alert>
                     )}
                   </div>
-                ))}
-              </div>
-            </div>
-          </DialogHeader>
+                </div>
+              )}
 
-          {/* Corps du modal */}
-          <div className="space-y-6">
-            {/* Étape 1: Sélection des dates */}
-            {currentStep === 1 && (
-              <div className="space-y-6">
-                <div className="text-center">
-                  <h3 className="text-lg font-semibold mb-4">Choisissez vos dates</h3>
+              {/* Étape 2: Contact */}
+              {currentStep === 2 && (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="phone">Numéro de téléphone *</Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="+229 XX XX XX XX"
+                      value={reservationDetails.contactPhone}
+                      onChange={(e) => handleInputChange('contactPhone', e.target.value)}
+                    />
+                  </div>
                   
-                  {/* Sélecteurs de dates */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    {/* Date de début */}
-                    <div className="space-y-2">
-                      <Label>Date de début</Label>
-                      <Popover open={isStartDateOpen} onOpenChange={setIsStartDateOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-start text-left font-normal"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {safeFormatDate(selectedStartDate, 'long')}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={selectedStartDate}
-                            onSelect={handleStartDateChange}
-                            disabled={(date) => date < new Date()}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+                  <div>
+                    <Label htmlFor="delivery">Mode de livraison</Label>
+                    <Select value={reservationDetails.deliveryMethod} onValueChange={(value) => handleInputChange('deliveryMethod', value)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pickup">Retrait sur place</SelectItem>
+                        <SelectItem value="delivery">Livraison</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                    {/* Date de fin */}
-                    <div className="space-y-2">
-                      <Label>Date de fin</Label>
-                      <Popover open={isEndDateOpen} onOpenChange={setIsEndDateOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-start text-left font-normal"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {safeFormatDate(selectedEndDate, 'long')}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={selectedEndDate}
-                            onSelect={handleEndDateChange}
-                            disabled={(date) => date <= selectedStartDate}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                  {reservationDetails.deliveryMethod === 'delivery' && (
+                    <div>
+                      <Label htmlFor="address">Adresse de livraison</Label>
+                      <Input
+                        id="address"
+                        placeholder="Votre adresse complète"
+                        value={reservationDetails.deliveryAddress}
+                        onChange={(e) => handleInputChange('deliveryAddress', e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <Label htmlFor="requests">Demandes spéciales (optionnel)</Label>
+                    <textarea
+                      id="requests"
+                      className="w-full p-2 border border-gray-300 rounded-md"
+                      rows={3}
+                      placeholder="Informations supplémentaires..."
+                      value={reservationDetails.specialRequests}
+                      onChange={(e) => handleInputChange('specialRequests', e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Étape 3: Identité */}
+              {currentStep === 3 && (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="identity-number">Numéro de pièce d'identité *</Label>
+                    <Input
+                      id="identity-number"
+                      placeholder="Numéro CNI, passeport..."
+                      value={reservationDetails.identityNumber}
+                      onChange={(e) => handleInputChange('identityNumber', e.target.value)}
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="identity-doc">Document d'identité *</Label>
+                    <div className="mt-2">
+                      <input
+                        id="identity-doc"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      <div 
+                        onClick={() => document.getElementById('identity-doc')?.click()}
+                        className={cn(
+                          "border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer transition-colors",
+                          reservationDetails.identityDocument 
+                            ? "border-green-300 bg-green-50" 
+                            : "border-gray-300 bg-gray-50 hover:bg-gray-100"
+                        )}
+                      >
+                        {reservationDetails.identityDocument ? (
+                          <>
+                            <CheckCircle className="h-6 w-6 text-green-600 mb-1 mx-auto" />
+                            <p className="text-sm text-green-700">Document téléchargé: {reservationDetails.identityDocument.name}</p>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-6 w-6 text-gray-400 mb-1 mx-auto" />
+                            <p className="text-sm text-gray-600">Cliquez pour télécharger votre pièce d'identité</p>
+                            <p className="text-xs text-gray-500 mt-1">PNG, JPG - Max 5MB</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Étape 4: Paiement */}
+              {currentStep === 4 && (
+                <div className="space-y-6">
+                  <div>
+                    <Label className="text-base font-medium">Mode de paiement</Label>
+                    <div className="space-y-3 mt-3">
+                      
+                      {/* Option Portefeuille */}
+                      <Card 
+                        className={`cursor-pointer transition-all ${
+                          paymentMethod === 'wallet' 
+                            ? 'border-emerald-500 bg-emerald-50' 
+                            : 'hover:border-gray-300'
+                        }`}
+                        onClick={() => setPaymentMethod('wallet')}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <Wallet className="h-6 w-6 text-emerald-600" />
+                              <div>
+                                <p className="font-medium">Mon portefeuille</p>
+                                <p className="text-sm text-gray-500">
+                                  Solde: {safeToLocaleString(walletBalance)} FCFA
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              {isSufficientBalance ? (
+                                <CheckCircle className="h-5 w-5 text-green-600" />
+                              ) : (
+                                <AlertTriangle className="h-5 w-5 text-orange-500" />
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Alerte solde insuffisant */}
+                      {paymentMethod === 'wallet' && !isSufficientBalance && (
+                        <Alert className="border-orange-200 bg-orange-50">
+                          <AlertTriangle className="h-4 w-4 text-orange-600" />
+                          <AlertDescription className="text-orange-700">
+                            <div className="flex items-center justify-between">
+                              <span>
+                                Solde insuffisant. Il vous manque {safeToLocaleString(calculatedTotal - walletBalance)} FCFA.
+                              </span>
+                              <Button
+                                size="sm"
+                                onClick={() => setModalMode('recharge')}
+                                className="ml-2"
+                              >
+                                <Plus className="mr-1 h-3 w-3" />
+                                Recharger
+                              </Button>
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {/* Option Carte bancaire */}
+                      <Card 
+                        className={`cursor-pointer transition-all ${
+                          paymentMethod === 'card' 
+                            ? 'border-blue-500 bg-blue-50' 
+                            : 'hover:border-gray-300'
+                        }`}
+                        onClick={() => setPaymentMethod('card')}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <CreditCard className="h-6 w-6 text-blue-600" />
+                              <div>
+                                <p className="font-medium">Carte bancaire</p>
+                                <p className="text-sm text-gray-500">Paiement sécurisé via Stripe</p>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
                   </div>
 
-                  {/* Résumé de la période */}
-                  <Card className="bg-blue-50 border-blue-200">
+                  {/* Conditions générales */}
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="terms" 
+                      checked={reservationDetails.acceptTerms}
+                      onCheckedChange={(checked) => handleInputChange('acceptTerms', checked)}
+                    />
+                    <Label htmlFor="terms" className="text-sm">
+                      J'accepte les <span className="text-blue-600 underline cursor-pointer">conditions générales</span>
+                    </Label>
+                  </div>
+                </div>
+              )}
+              
+              {/* Étape 5: Récapitulatif */}
+              {currentStep === 5 && (
+                <div className="space-y-6">
+                  {/* Récapitulatif complet */}
+                  <Card className="bg-gray-50">
                     <CardContent className="p-4">
-                      <div className="flex items-center justify-center space-x-4">
-                        <div className="text-center">
-                          <p className="text-sm text-blue-600">Durée</p>
-                          <p className="font-bold text-blue-800">
-                            {calculateDays(selectedStartDate, selectedEndDate)} jour{calculateDays(selectedStartDate, selectedEndDate) > 1 ? 's' : ''}
-                          </p>
+                      <h4 className="font-medium mb-3">Récapitulatif de la réservation</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span>Équipement:</span>
+                          <span className="font-medium">{validEquipment.title}</span>
                         </div>
-                        <div className="w-px h-8 bg-blue-300" />
-                        <div className="text-center">
-                          <p className="text-sm text-blue-600">Prix journalier</p>
-                          <p className="font-bold text-blue-800">
-                            {safeToLocaleString(validEquipment.daily_price)} FCFA
-                          </p>
+                        <div className="flex justify-between">
+                          <span>Période:</span>
+                          <span>{safeFormatDate(selectedStartDate, 'short')} - {safeFormatDate(selectedEndDate, 'short')}</span>
                         </div>
-                        <div className="w-px h-8 bg-blue-300" />
-                        <div className="text-center">
-                          <p className="text-sm text-blue-600">Total</p>
-                          <p className="text-xl font-bold text-green-600">
-                            {safeToLocaleString(calculatedTotal)} FCFA
-                          </p>
+                        <div className="flex justify-between">
+                          <span>Durée:</span>
+                          <span>{calculateDays(selectedStartDate, selectedEndDate)} jour(s)</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Contact:</span>
+                          <span>{reservationDetails.contactPhone || 'Non renseigné'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Livraison:</span>
+                          <span>{reservationDetails.deliveryMethod === 'pickup' ? 'Retrait' : 'Livraison'}</span>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
-
-                  {/* Information sur le prix hebdomadaire si applicable */}
-                  {validEquipment.weekly_price > 0 && calculateDays(selectedStartDate, selectedEndDate) >= 7 && (
-                    <Alert className="border-green-200 bg-green-50">
-                      <Calculator className="h-4 w-4 text-green-600" />
-                      <AlertDescription className="text-green-700">
-                        <strong>Prix hebdomadaire appliqué !</strong> Vous économisez par rapport au tarif journalier.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Étape 2: Contact */}
-            {currentStep === 2 && (
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="phone">Numéro de téléphone *</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    placeholder="+229 XX XX XX XX"
-                    value={reservationDetails.contactPhone}
-                    onChange={(e) => handleInputChange('contactPhone', e.target.value)}
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="delivery">Mode de livraison</Label>
-                  <Select value={reservationDetails.deliveryMethod} onValueChange={(value) => handleInputChange('deliveryMethod', value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pickup">Retrait sur place</SelectItem>
-                      <SelectItem value="delivery">Livraison</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {reservationDetails.deliveryMethod === 'delivery' && (
-                  <div>
-                    <Label htmlFor="address">Adresse de livraison</Label>
-                    <Input
-                      id="address"
-                      placeholder="Votre adresse complète"
-                      value={reservationDetails.deliveryAddress}
-                      onChange={(e) => handleInputChange('deliveryAddress', e.target.value)}
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <Label htmlFor="requests">Demandes spéciales (optionnel)</Label>
-                  <textarea
-                    id="requests"
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                    rows={3}
-                    placeholder="Informations supplémentaires..."
-                    value={reservationDetails.specialRequests}
-                    onChange={(e) => handleInputChange('specialRequests', e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Étape 3: Identité */}
-            {currentStep === 3 && (
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="identity-number">Numéro de pièce d'identité *</Label>
-                  <Input
-                    id="identity-number"
-                    placeholder="Numéro CNI, passeport..."
-                    value={reservationDetails.identityNumber}
-                    onChange={(e) => handleInputChange('identityNumber', e.target.value)}
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="identity-doc">Document d'identité *</Label>
-                  <div className="mt-2">
-                    <input
-                      id="identity-doc"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                    <div 
-                      onClick={() => document.getElementById('identity-doc')?.click()}
-                      className={cn(
-                        "border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer transition-colors",
-                        reservationDetails.identityDocument 
-                          ? "border-green-300 bg-green-50" 
-                          : "border-gray-300 bg-gray-50 hover:bg-gray-100"
-                      )}
-                    >
-                      {reservationDetails.identityDocument ? (
-                        <>
-                          <CheckCircle className="h-6 w-6 text-green-600 mb-1 mx-auto" />
-                          <p className="text-sm text-green-700">Document téléchargé: {reservationDetails.identityDocument.name}</p>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-6 w-6 text-gray-400 mb-1 mx-auto" />
-                          <p className="text-sm text-gray-600">Cliquez pour télécharger votre pièce d'identité</p>
-                          <p className="text-xs text-gray-500 mt-1">PNG, JPG - Max 5MB</p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Étape 4: Paiement */}
-            {currentStep === 4 && (
-              <div className="space-y-6">
-                <div>
-                  <Label className="text-base font-medium">Mode de paiement</Label>
-                  <div className="space-y-3 mt-3">
-                    
-                    {/* Option Portefeuille */}
-                    <Card 
-                      className={`cursor-pointer transition-all ${
-                        paymentMethod === 'wallet' 
-                          ? 'border-emerald-500 bg-emerald-50' 
-                          : 'hover:border-gray-300'
-                      }`}
-                      onClick={() => setPaymentMethod('wallet')}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <Wallet className="h-6 w-6 text-emerald-600" />
-                            <div>
-                              <p className="font-medium">Mon portefeuille</p>
-                              <p className="text-sm text-gray-500">
-                                Solde: {safeToLocaleString(walletBalance)} FCFA
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            {isSufficientBalance ? (
-                              <CheckCircle className="h-5 w-5 text-green-600" />
-                            ) : (
-                              <AlertTriangle className="h-5 w-5 text-orange-500" />
-                            )}
-                          </div>
+                  
+                  {/* Informations de paiement */}
+                  <Card className="bg-blue-50 border-blue-200">
+                    <CardContent className="p-4">
+                      <h4 className="font-medium mb-2">Paiement</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span>Méthode:</span>
+                          <span>{paymentMethod === 'wallet' ? 'Portefeuille' : 'Carte bancaire'}</span>
                         </div>
-                      </CardContent>
-                    </Card>
+                        <Separator />
+                        <div className="flex justify-between font-medium text-lg">
+                          <span>Total:</span>
+                          <span className="text-green-600">{safeToLocaleString(calculatedTotal)} FCFA</span>
+                        </div>
+                        {paymentMethod === 'wallet' && (
+                          <>
+                            <div className="flex justify-between">
+                              <span>Solde actuel:</span>
+                              <span>{safeToLocaleString(walletBalance)} FCFA</span>
+                            </div>
+                            <div className="flex justify-between text-red-600">
+                              <span>Après déduction:</span>
+                              <span>{safeToLocaleString(walletBalance - calculatedTotal)} FCFA</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
 
-                    {/* Alerte solde insuffisant */}
-                    {paymentMethod === 'wallet' && !isSufficientBalance && (
-                      <Alert className="border-orange-200 bg-orange-50">
-                        <AlertTriangle className="h-4 w-4 text-orange-600" />
-                        <AlertDescription className="text-orange-700">
-                          <div className="flex items-center justify-between">
-                            <span>
-                              Solde insuffisant. Il vous manque {safeToLocaleString(calculatedTotal - walletBalance)} FCFA.
-                            </span>
-                            <Button
-                              size="sm"
-                              onClick={() => setShowRechargeModal(true)}
-                              className="ml-2"
-                            >
-                              <Plus className="mr-1 h-3 w-3" />
-                              Recharger
-                            </Button>
-                          </div>
-                        </AlertDescription>
-                      </Alert>
+                  {/* Bouton de soumission */}
+                  <Button
+                    onClick={handleReservationSubmit}
+                    disabled={isSubmitting || (paymentMethod === 'wallet' && !isSufficientBalance)}
+                    className="w-full h-12"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Clock className="mr-2 h-4 w-4 animate-spin" />
+                        Envoi en cours...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                        {paymentMethod === 'wallet' 
+                          ? `Réserver & Débiter ${safeToLocaleString(calculatedTotal)} FCFA`
+                          : 'Envoyer la demande de réservation'
+                        }
+                      </>
                     )}
-
-                    {/* Option Carte bancaire */}
-                    <Card 
-                      className={`cursor-pointer transition-all ${
-                        paymentMethod === 'card' 
-                          ? 'border-blue-500 bg-blue-50' 
-                          : 'hover:border-gray-300'
-                      }`}
-                      onClick={() => setPaymentMethod('card')}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <CreditCard className="h-6 w-6 text-blue-600" />
-                            <div>
-                              <p className="font-medium">Carte bancaire</p>
-                              <p className="text-sm text-gray-500">Paiement sécurisé via Stripe</p>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
+                  </Button>
                 </div>
+              )}
 
-                {/* Conditions générales */}
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="terms" 
-                    checked={reservationDetails.acceptTerms}
-                    onCheckedChange={(checked) => handleInputChange('acceptTerms', checked)}
-                  />
-                  <Label htmlFor="terms" className="text-sm">
-                    J'accepte les <span className="text-blue-600 underline cursor-pointer">conditions générales</span>
-                  </Label>
-                </div>
-              </div>
-            )}
-            
-            {/* Étape 5: Récapitulatif */}
-            {currentStep === 5 && (
-              <div className="space-y-6">
-                {/* Récapitulatif complet */}
-                <Card className="bg-gray-50">
-                  <CardContent className="p-4">
-                    <h4 className="font-medium mb-3">Récapitulatif de la réservation</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>Équipement:</span>
-                        <span className="font-medium">{validEquipment.title}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Période:</span>
-                        <span>{safeFormatDate(selectedStartDate, 'short')} - {safeFormatDate(selectedEndDate, 'short')}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Durée:</span>
-                        <span>{calculateDays(selectedStartDate, selectedEndDate)} jour(s)</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Contact:</span>
-                        <span>{reservationDetails.contactPhone || 'Non renseigné'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Livraison:</span>
-                        <span>{reservationDetails.deliveryMethod === 'pickup' ? 'Retrait' : 'Livraison'}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                {/* Informations de paiement */}
-                <Card className="bg-blue-50 border-blue-200">
-                  <CardContent className="p-4">
-                    <h4 className="font-medium mb-2">Paiement</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>Méthode:</span>
-                        <span>{paymentMethod === 'wallet' ? 'Portefeuille' : 'Carte bancaire'}</span>
-                      </div>
-                      <Separator />
-                      <div className="flex justify-between font-medium text-lg">
-                        <span>Total:</span>
-                        <span className="text-green-600">{safeToLocaleString(calculatedTotal)} FCFA</span>
-                      </div>
-                      {paymentMethod === 'wallet' && (
-                        <>
-                          <div className="flex justify-between">
-                            <span>Solde actuel:</span>
-                            <span>{safeToLocaleString(walletBalance)} FCFA</span>
-                          </div>
-                          <div className="flex justify-between text-red-600">
-                            <span>Après déduction:</span>
-                            <span>{safeToLocaleString(walletBalance - calculatedTotal)} FCFA</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Bouton de soumission */}
+              {/* Navigation */}
+              <div className="flex justify-between pt-4 border-t">
                 <Button
-                  onClick={handleReservationSubmit}
-                  disabled={isSubmitting || (paymentMethod === 'wallet' && !isSufficientBalance)}
-                  className="w-full h-12"
+                  variant="outline"
+                  onClick={currentStep === 1 ? onClose : prevStep}
+                  disabled={isSubmitting}
                 >
-                  {isSubmitting ? (
-                    <>
-                      <Clock className="mr-2 h-4 w-4 animate-spin" />
-                      Envoi en cours...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="mr-2 h-4 w-4" />
-                      {paymentMethod === 'wallet' 
-                        ? `Réserver & Débiter ${safeToLocaleString(calculatedTotal)} FCFA`
-                        : 'Envoyer la demande de réservation'
-                      }
-                    </>
-                  )}
+                  {currentStep === 1 ? 'Annuler' : 'Précédent'}
                 </Button>
+                
+                {currentStep < 5 ? (
+                  <Button onClick={nextStep} disabled={isSubmitting}>
+                    Suivant
+                  </Button>
+                ) : null}
               </div>
-            )}
-
-            {/* Navigation */}
-            <div className="flex justify-between pt-4 border-t">
-              <Button
-                variant="outline"
-                onClick={currentStep === 1 ? onClose : prevStep}
-                disabled={isSubmitting}
-              >
-                {currentStep === 1 ? 'Annuler' : 'Précédent'}
-              </Button>
-              
-              {currentStep < 5 ? (
-                <Button onClick={nextStep} disabled={isSubmitting}>
-                  Suivant
-                </Button>
-              ) : null}
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      )}
 
-      {/* Modal de recharge temporaire */}
-      {showRechargeModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Recharge de portefeuille</h3>
-            <p className="text-gray-600 mb-4">
-              La fonctionnalité de recharge sera disponible prochainement. 
-              En attendant, vous pouvez choisir le paiement par carte bancaire.
-            </p>
-            <div className="flex space-x-2">
+      {/* Modal de recharge Kkiapay - Mode indépendant */}
+      {modalMode === 'recharge' && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setModalMode('reservation');
+              setRechargeAmount('');
+            }
+          }}
+        >
+          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="mb-6">
+              <h3 className="text-xl font-semibold mb-2 flex items-center">
+                <Wallet className="mr-2 h-5 w-5 text-emerald-600" />
+                Recharger votre portefeuille
+              </h3>
+              <p className="text-gray-600 text-sm">
+                Solde actuel: <span className="font-medium text-emerald-600">{safeToLocaleString(walletBalance)} FCFA</span>
+              </p>
+              <p className="text-gray-500 text-xs mt-1">
+                Il vous manque: <span className="font-medium text-red-600">{safeToLocaleString(calculatedTotal - walletBalance)} FCFA</span>
+              </p>
+            </div>
+
+            {/* Montants rapides */}
+            <div className="mb-4">
+              <Label className="text-sm font-medium mb-3 block">Montants rapides</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {quickAmounts.map((amount) => (
+                  <Button
+                    key={amount}
+                    variant={rechargeAmount === amount.toString() ? "default" : "outline"}
+                    onClick={() => handleQuickAmount(amount)}
+                    className="text-sm py-2 h-auto"
+                    disabled={isRecharging}
+                  >
+                    {safeToLocaleString(amount)} FCFA
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Montant personnalisé */}
+            <div className="mb-6">
+              <Label htmlFor="custom-amount" className="text-sm font-medium mb-2 block">
+                Ou saisissez un montant personnalisé
+              </Label>
+              <div className="relative">
+                <Input
+                  id="custom-amount"
+                  type="text"
+                  placeholder="Montant en FCFA"
+                  value={formatRechargeAmount(rechargeAmount)}
+                  onChange={handleRechargeAmountChange}
+                  disabled={isRecharging}
+                  className="pr-16"
+                />
+                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">
+                  FCFA
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Minimum: 1 000 FCFA • Maximum: 1 000 000 FCFA
+              </p>
+            </div>
+
+            {/* Informations de paiement */}
+            <Card className="bg-blue-50 border-blue-200 mb-6">
+              <CardContent className="p-4">
+                <div className="flex items-center mb-2">
+                  <Info className="h-4 w-4 text-blue-600 mr-2" />
+                  <span className="text-sm font-medium text-blue-800">Paiement via KkiaPay</span>
+                </div>
+                <p className="text-xs text-blue-700">
+                  Widget KkiaPay sécurisé pour Mobile Money, cartes bancaires et autres moyens de paiement locaux.
+                  Fallback Stripe si KkiaPay indisponible.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Boutons d'action */}
+            <div className="flex space-x-3">
               <Button 
                 variant="outline"
-                onClick={() => setShowRechargeModal(false)}
+                onClick={() => {
+                  setModalMode('reservation');
+                  setRechargeAmount('');
+                }}
+                disabled={isRecharging}
                 className="flex-1"
               >
-                Fermer
+                Annuler
               </Button>
               <Button 
-                onClick={() => {
-                  setShowRechargeModal(false);
-                  setPaymentMethod('card');
-                }}
-                className="flex-1"
+                onClick={handleKkiapayRecharge}
+                disabled={isRecharging || !rechargeAmount || Number(rechargeAmount) < 1000}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
               >
-                Payer par carte
+                {isRecharging ? (
+                  <>
+                    <Clock className="mr-2 h-4 w-4 animate-spin" />
+                    Redirection...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="mr-2 h-4 w-4" />
+                    Recharger
+                  </>
+                )}
               </Button>
+            </div>
+
+            {/* Note de sécurité */}
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-start">
+                <CheckCircle className="h-4 w-4 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-gray-600">
+                  <p className="font-medium mb-1">Paiement 100% sécurisé</p>
+                  <p>Vos données bancaires sont protégées et ne sont jamais stockées sur nos serveurs.</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

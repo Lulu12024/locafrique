@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ import {
   Mic,
   Scissors,
   ChevronRight,
+  ChevronLeft,
   TrendingUp,
   Users,
   MapPin,
@@ -31,6 +32,11 @@ import {
 
 const CategoriesHomepage = () => {
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number>(0);
+  const touchEndX = useRef<number>(0);
 
   // Catégories selon le cahier des charges 3W-LOC
   const categories = [
@@ -174,6 +180,68 @@ const CategoriesHomepage = () => {
     }
   ];
 
+  // Calcul des dimensions responsive
+  const getItemsPerView = () => {
+    if (typeof window === 'undefined') return 4;
+    if (window.innerWidth < 640) return 1; // mobile
+    if (window.innerWidth < 768) return 2; // sm
+    if (window.innerWidth < 1024) return 3; // md
+    if (window.innerWidth < 1280) return 4; // lg
+    return 5; // xl et plus
+  };
+
+  const [itemsPerView, setItemsPerView] = useState(getItemsPerView);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setItemsPerView(getItemsPerView());
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const maxIndex = Math.max(0, categories.length - itemsPerView);
+
+  // Navigation functions
+  const goToPrevious = () => {
+    if (isTransitioning) return;
+    setIsTransitioning(true);
+    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : maxIndex));
+    setTimeout(() => setIsTransitioning(false), 300);
+  };
+
+  const goToNext = () => {
+    if (isTransitioning) return;
+    setIsTransitioning(true);
+    setCurrentIndex((prev) => (prev < maxIndex ? prev + 1 : 0));
+    setTimeout(() => setIsTransitioning(false), 300);
+  };
+
+  // Touch handlers pour le swipe mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+    
+    const distance = touchStartX.current - touchEndX.current;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+
+    if (isLeftSwipe) {
+      goToNext();
+    }
+    if (isRightSwipe) {
+      goToPrevious();
+    }
+  };
+
   // Fonction pour obtenir l'icône de sous-catégorie
   const getSubcategoryIcon = (subcategory: string) => {
     const iconMap: { [key: string]: any } = {
@@ -229,204 +297,176 @@ const CategoriesHomepage = () => {
           </p>
         </div>
 
-        {/* Grille des catégories principales */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-16">
-          {categories.map((category) => {
-            const IconComponent = category.icon;
-            return (
-              <Card 
-                key={category.id}
-                className="group hover:shadow-2xl transition-all duration-500 cursor-pointer transform hover:-translate-y-3 border-0 overflow-hidden relative"
-                onMouseEnter={() => setHoveredCategory(category.id)}
-                onMouseLeave={() => setHoveredCategory(null)}
-                onClick={() => handleCategoryClick(category.id)}
-              >
-                <CardContent className="p-0">
-                  {/* Header avec gradient */}
-                  <div className={`bg-gradient-to-br ${category.gradient} p-6 text-white relative overflow-hidden`}>
-                    {/* Badge trending */}
-                    {category.trending && (
-                      <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 text-xs px-2 py-1 rounded-full font-bold flex items-center">
-                        <Star className="h-3 w-3 mr-1" />
-                        Tendance
-                      </div>
-                    )}
-                    
-                    {/* Effet de brillance au hover */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
-                    
-                    <div className="relative z-10">
-                      <IconComponent className="h-12 w-12 mb-4 group-hover:scale-110 transition-transform duration-300 drop-shadow-lg" />
-                      <h3 className="text-lg font-bold mb-2 leading-tight">
-                        {category.name}
-                      </h3>
-                      <p className="text-sm opacity-90 leading-relaxed">
-                        {category.description}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* Contenu avec compteur et preview sous-catégories */}
-                  <div className="p-4 bg-white">
-                    <div className="flex items-center justify-between mb-3">
-                      <Badge variant="secondary" className="bg-gray-100 text-gray-700 font-semibold">
-                        {category.count} articles
-                      </Badge>
-                      <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-gray-600 group-hover:translate-x-1 transition-all" />
-                    </div>
-                    
-                    {/* Sous-catégories en preview */}
-                    <div className="space-y-1">
-                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        Sous-catégories :
-                      </h4>
-                      <div className="flex flex-wrap gap-1">
-                        {category.subcategories.slice(0, 3).map((sub, index) => (
-                          <span 
-                            key={index}
-                            className="text-xs px-2 py-1 bg-gray-50 text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSubcategoryClick(category.id, sub);
-                            }}
-                          >
-                            {sub}
-                          </span>
-                        ))}
-                        {category.subcategories.length > 3 && (
-                          <span className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded-md font-medium">
-                            +{category.subcategories.length - 3} autres
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+        {/* Carrousel des catégories */}
+        <div className="relative">
+          {/* Bouton Précédent */}
+          <Button
+            variant="outline"
+            size="icon"
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 backdrop-blur-sm shadow-lg border-gray-200 hover:bg-white hover:shadow-xl transition-all duration-200 disabled:opacity-50"
+            onClick={goToPrevious}
+            disabled={isTransitioning}
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
 
-        {/* Section détaillée des sous-catégories populaires */}
-        <div className="bg-white rounded-3xl shadow-xl p-8 mb-12">
-          <div className="text-center mb-8">
-            <h3 className="text-3xl font-bold text-gray-900 mb-4">
-              Sous-catégories les plus recherchées
-            </h3>
-            <p className="text-gray-600">
-              Découvrez les équipements les plus demandés par notre communauté
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {[
-              { name: 'Appareils photo', count: 89, category: 'electronique' },
-              { name: 'Vélos', count: 67, category: 'vehicules' },
-              { name: 'Outils de bricolage', count: 134, category: 'outils-equipements' },
-              { name: 'Projecteurs', count: 45, category: 'materiel-bureau' },
-              { name: 'Équipements de sport', count: 78, category: 'equipements-loisirs' },
-              { name: 'Sonorisation', count: 56, category: 'evenements' },
-              { name: 'Machines à laver', count: 34, category: 'electromenager' },
-              { name: 'Micros', count: 43, category: 'materiel-audiovisuel' },
-              { name: 'Tondeuses', count: 67, category: 'bricolage-jardinage' },
-              { name: 'Remorques', count: 23, category: 'equipements-transport' },
-              { name: 'Smartphones', count: 156, category: 'electronique' },
-              { name: 'Caméras pro', count: 34, category: 'materiel-audiovisuel' }
-            ].map((subcategory, index) => {
-              const IconComponent = getSubcategoryIcon(subcategory.name);
-              return (
-                <div 
-                  key={index}
-                  className="flex flex-col items-center p-4 rounded-xl hover:bg-gray-50 transition-all cursor-pointer group border border-transparent hover:border-gray-200"
-                  onClick={() => handleSubcategoryClick(subcategory.category, subcategory.name)}
-                >
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform group-hover:shadow-lg">
-                    <IconComponent className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <span className="text-sm font-medium text-gray-700 text-center leading-tight mb-1">
-                    {subcategory.name}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {subcategory.count} articles
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+          {/* Bouton Suivant */}
+          <Button
+            variant="outline"
+            size="icon"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 backdrop-blur-sm shadow-lg border-gray-200 hover:bg-white hover:shadow-xl transition-all duration-200 disabled:opacity-50"
+            onClick={goToNext}
+            disabled={isTransitioning}
+          >
+            <ChevronRight className="h-5 w-5" />
+          </Button>
 
-        {/* Section CTA pour les propriétaires */}
-        <div className="relative overflow-hidden rounded-3xl">
-          <div className="bg-gradient-to-r from-green-600 via-blue-600 to-purple-600 p-8 lg:p-12 text-white relative">
-            {/* Motif de fond */}
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent"></div>
-              <div className="grid grid-cols-8 gap-4 h-full">
-                {Array.from({ length: 32 }).map((_, i) => (
-                  <div key={i} className="bg-white/10 rounded-full"></div>
-                ))}
-              </div>
-            </div>
-            
-            <div className="relative z-10 text-center">
-              <h3 className="text-3xl lg:text-4xl font-bold mb-4">
-                Vous avez du matériel à louer ?
-              </h3>
-              <p className="text-xl mb-8 opacity-90 max-w-2xl mx-auto">
-                Rejoignez plus de 1200 propriétaires qui génèrent des revenus avec leurs équipements. 
-                Inscription gratuite et commission compétitive.
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                <Button 
-                  size="lg" 
-                  className="bg-white text-green-600 hover:bg-gray-100 px-8 py-4 text-lg font-semibold rounded-xl shadow-lg"
-                  onClick={() => window.location.href = '/become-owner'}
-                >
-                  Publier une annonce
-                </Button>
-                <Button 
-                  size="lg" 
-                  variant="outline" 
-                  className="border-2 border-white text-white hover:bg-white/10 px-8 py-4 text-lg font-semibold rounded-xl"
-                  onClick={() => window.location.href = '/how-it-works'}
-                >
-                  Comment ça marche
-                </Button>
-              </div>
+          {/* Container du carrousel */}
+          <div className="overflow-hidden mx-8">
+            <div
+              ref={carouselRef}
+              className="flex transition-transform duration-300 ease-in-out"
+              style={{
+                transform: `translateX(-${currentIndex * (100 / itemsPerView)}%)`,
+              }}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              {categories.map((category) => {
+                const IconComponent = category.icon;
+                return (
+                  <div
+                    key={category.id}
+                    className="flex-none px-3"
+                    style={{ width: `${100 / itemsPerView}%` }}
+                  >
+                    <Card 
+                      className="group hover:shadow-2xl transition-all duration-500 cursor-pointer transform hover:-translate-y-3 border-0 overflow-hidden relative h-full"
+                      onMouseEnter={() => setHoveredCategory(category.id)}
+                      onMouseLeave={() => setHoveredCategory(null)}
+                      onClick={() => handleCategoryClick(category.id)}
+                    >
+                      <CardContent className="p-0 h-full flex flex-col">
+                        {/* Header avec gradient */}
+                        <div className={`bg-gradient-to-br ${category.gradient} p-6 text-white relative overflow-hidden flex-grow`}>
+                          {/* Badge trending */}
+                          {category.trending && (
+                            <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 text-xs px-2 py-1 rounded-full font-bold flex items-center">
+                              <Star className="h-3 w-3 mr-1" />
+                              Tendance
+                            </div>
+                          )}
+                          
+                          {/* Effet de brillance au hover */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
+                          
+                          <div className="relative z-10">
+                            <IconComponent className="h-12 w-12 mb-4 group-hover:scale-110 transition-transform duration-300 drop-shadow-lg" />
+                            <h3 className="text-lg font-bold mb-2 leading-tight">
+                              {category.name}
+                            </h3>
+                            <p className="text-sm opacity-90 leading-relaxed">
+                              {category.description}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {/* Contenu avec compteur et preview sous-catégories */}
+                        <div className="p-4 bg-white flex-shrink-0">
+                          <div className="flex items-center justify-between mb-3">
+                            <Badge variant="secondary" className="bg-gray-100 text-gray-700 font-semibold">
+                              {category.count} articles
+                            </Badge>
+                            <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-gray-600 group-hover:translate-x-1 transition-all" />
+                          </div>
+                          
+                          {/* Sous-catégories en preview */}
+                          <div className="space-y-1">
+                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                              Sous-catégories :
+                            </h4>
+                            <div className="flex flex-wrap gap-1">
+                              {category.subcategories.slice(0, 3).map((sub, index) => (
+                                <span 
+                                  key={index}
+                                  className="text-xs px-2 py-1 bg-gray-50 text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSubcategoryClick(category.id, sub);
+                                  }}
+                                >
+                                  {sub}
+                                </span>
+                              ))}
+                              {category.subcategories.length > 3 && (
+                                <span className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded-md font-medium">
+                                  +{category.subcategories.length - 3} plus
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </div>
 
-        {/* Statistiques de la plateforme */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-12">
-          {[
-            { label: 'Catégories', value: '10', icon: '📂', description: 'Secteurs couverts' },
-            { label: 'Équipements', value: '2000+', icon: '⚙️', description: 'Articles disponibles' },
-            { label: 'Utilisateurs', value: '1200+', icon: '👥', description: 'Membres actifs' },
-            { label: 'Villes', value: '25+', icon: '🏙️', description: 'Locations couvertes' }
-          ].map((stat, index) => (
-            <div key={index} className="text-center p-6 bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow">
-              <div className="text-4xl mb-3">{stat.icon}</div>
-              <div className="text-3xl font-bold text-gray-900 mb-1">{stat.value}</div>
-              <div className="text-sm font-medium text-gray-700 mb-1">{stat.label}</div>
-              <div className="text-xs text-gray-500">{stat.description}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Indicateur des villes principales */}
-        <div className="mt-12 text-center">
-          <h4 className="text-lg font-semibold text-gray-700 mb-4 flex items-center justify-center">
-            <MapPin className="h-5 w-5 mr-2 text-green-600" />
-            Disponible dans vos villes
-          </h4>
-          <div className="flex flex-wrap justify-center gap-3">
-            {['Cotonou', 'Porto-Novo', 'Parakou', 'Abomey-Calavi', 'Ouidah', 'Natitingou'].map((city, index) => (
-              <Badge key={index} variant="outline" className="px-4 py-2 text-sm">
-                {city}
-              </Badge>
+          {/* Indicateurs de position */}
+          <div className="flex justify-center mt-6 space-x-2">
+            {Array.from({ length: maxIndex + 1 }, (_, index) => (
+              <button
+                key={index}
+                className={`w-2 h-2 rounded-full transition-all duration-200 ${
+                  index === currentIndex 
+                    ? 'bg-green-600 w-8' 
+                    : 'bg-gray-300 hover:bg-gray-400'
+                }`}
+                onClick={() => {
+                  if (!isTransitioning) {
+                    setIsTransitioning(true);
+                    setCurrentIndex(index);
+                    setTimeout(() => setIsTransitioning(false), 300);
+                  }
+                }}
+              />
             ))}
+          </div>
+        </div>
+
+        {/* Section statistiques */}
+        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+          <div className="p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200">
+            <div className="flex items-center justify-center mb-3">
+              <div className="p-3 bg-blue-100 rounded-full">
+                <Users className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-1">15,000+</h3>
+            <p className="text-gray-600">Utilisateurs actifs</p>
+          </div>
+
+          <div className="p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200">
+            <div className="flex items-center justify-center mb-3">
+              <div className="p-3 bg-green-100 rounded-full">
+                <TrendingUp className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-1">95%</h3>
+            <p className="text-gray-600">Taux de satisfaction</p>
+          </div>
+
+          <div className="p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200">
+            <div className="flex items-center justify-center mb-3">
+              <div className="p-3 bg-purple-100 rounded-full">
+                <MapPin className="h-6 w-6 text-purple-600" />
+              </div>
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-1">50+</h3>
+            <p className="text-gray-600">Villes couvertes</p>
           </div>
         </div>
       </div>
@@ -434,4 +474,4 @@ const CategoriesHomepage = () => {
   );
 };
 
-export default CategoriesHomepage;  
+export default CategoriesHomepage;
