@@ -1,5 +1,5 @@
-// REMPLACER COMPLÈTEMENT le fichier : src/components/booking/ReservationModal.tsx
-// VERSION AVEC SÉLECTEUR DE DATES INTERACTIF ET INTÉGRATION KKIAPAY
+// src/components/booking/ReservationModal.tsx
+// VERSION CORRIGÉE AVEC LE NOUVEAU KKIAPAYWTIGET
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -36,6 +36,7 @@ import {
 import { useAuth } from '@/hooks/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
+import { KkiaPayWidget } from '@/components/KkiaPayWidget'; // Import du nouveau widget
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -203,7 +204,6 @@ function ReservationModal({
   
   // États pour la recharge
   const [rechargeAmount, setRechargeAmount] = useState('');
-  const [isRecharging, setIsRecharging] = useState(false);
   
   // Montants rapides pour la recharge
   const quickAmounts = [10000, 25000, 50000, 100000, 200000];
@@ -258,68 +258,38 @@ function ReservationModal({
   // Vérifier si le solde est suffisant
   const isSufficientBalance = walletBalance >= calculatedTotal;
 
-  // Gestion de la recharge Kkiapay
-  const handleKkiapayRecharge = async () => {
-    const amount = Number(rechargeAmount);
+  // Gestionnaires pour le widget KkiaPay
+  const handleRechargeSuccess = (response: any) => {
+    console.log('✅ Recharge réussie:', response);
     
-    if (!amount || amount < 1000) {
-      toast({
-        title: "Montant invalide",
-        description: "Le montant minimum est de 1000 FCFA.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (amount > 1000000) {
-      toast({
-        title: "Montant trop élevé",
-        description: "Le montant maximum est de 1 000 000 FCFA.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsRecharging(true);
+    // Recharger le solde
+    loadWalletBalance();
     
-    try {
-      const { data, error } = await supabase.functions.invoke('create-kakiapay-recharge', {
-        body: {
-          amount: amount,
-          payment_method: 'kakiapay',
-          currency: 'xof'
-        }
-      });
+    // Retourner au mode réservation
+    setModalMode('reservation');
+    setRechargeAmount('');
+    
+    toast({
+      title: "Recharge réussie !",
+      description: `Votre portefeuille a été rechargé de ${response.amount?.toLocaleString()} FCFA`,
+    });
+  };
 
-      if (error) throw error;
+  const handleRechargeError = (error: any) => {
+    console.error('❌ Erreur recharge:', error);
+    toast({
+      title: "Erreur recharge",
+      description: error.message || "Une erreur s'est produite lors de la recharge",
+      variant: "destructive"
+    });
+  };
 
-      if (data?.checkout_url) {
-        // Ouvrir Kkiapay dans un nouvel onglet
-        window.open(data.checkout_url, '_blank');
-        
-        toast({
-          title: "Redirection vers Kkiapay",
-          description: "Vous allez être redirigé vers Kkiapay pour le paiement",
-        });
-        
-        setModalMode('reservation');
-        setRechargeAmount('');
-        
-        // Recharger le solde après un délai
-        setTimeout(() => {
-          loadWalletBalance();
-        }, 5000);
-      }
-    } catch (error: any) {
-      console.error('Erreur recharge Kkiapay:', error);
-      toast({
-        title: "Erreur recharge",
-        description: error.message || "Une erreur s'est produite",
-        variant: "destructive"
-      });
-    } finally {
-      setIsRecharging(false);
-    }
+  const handleRechargeCancel = () => {
+    console.log('🚫 Recharge annulée par l\'utilisateur');
+    toast({
+      title: "Paiement annulé",
+      description: "Le paiement a été annulé",
+    });
   };
 
   const handleQuickAmount = (amount: number) => {
@@ -597,6 +567,8 @@ function ReservationModal({
       setIsSubmitting(false);
     }
   };
+
+  const rechargeAmountNumber = parseInt(rechargeAmount) || 0;
 
   return (
     <>
@@ -1046,7 +1018,7 @@ function ReservationModal({
         </Dialog>
       )}
 
-      {/* Modal de recharge Kkiapay - Mode indépendant */}
+      {/* Modal de recharge KkiaPay - NOUVELLE VERSION AVEC WIDGET */}
       {modalMode === 'recharge' && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -1081,7 +1053,6 @@ function ReservationModal({
                     variant={rechargeAmount === amount.toString() ? "default" : "outline"}
                     onClick={() => handleQuickAmount(amount)}
                     className="text-sm py-2 h-auto"
-                    disabled={isRecharging}
                   >
                     {safeToLocaleString(amount)} FCFA
                   </Button>
@@ -1101,7 +1072,6 @@ function ReservationModal({
                   placeholder="Montant en FCFA"
                   value={formatRechargeAmount(rechargeAmount)}
                   onChange={handleRechargeAmountChange}
-                  disabled={isRecharging}
                   className="pr-16"
                 />
                 <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">
@@ -1122,41 +1092,45 @@ function ReservationModal({
                 </div>
                 <p className="text-xs text-blue-700">
                   Widget KkiaPay sécurisé pour Mobile Money, cartes bancaires et autres moyens de paiement locaux.
-                  Fallback Stripe si KkiaPay indisponible.
                 </p>
               </CardContent>
             </Card>
 
-            {/* Boutons d'action */}
-            <div className="flex space-x-3">
-              <Button 
-                variant="outline"
-                onClick={() => {
-                  setModalMode('reservation');
-                  setRechargeAmount('');
-                }}
-                disabled={isRecharging}
-                className="flex-1"
-              >
-                Annuler
-              </Button>
-              <Button 
-                onClick={handleKkiapayRecharge}
-                disabled={isRecharging || !rechargeAmount || Number(rechargeAmount) < 1000}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-              >
-                {isRecharging ? (
-                  <>
-                    <Clock className="mr-2 h-4 w-4 animate-spin" />
-                    Redirection...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="mr-2 h-4 w-4" />
-                    Recharger
-                  </>
-                )}
-              </Button>
+            {/* Boutons d'action - NOUVELLE VERSION AVEC WIDGET */}
+            <div className="space-y-3">
+              {rechargeAmountNumber >= 1000 ? (
+                <KkiaPayWidget
+                  amount={rechargeAmountNumber}
+                  onSuccess={handleRechargeSuccess}
+                  onError={handleRechargeError}
+                  onCancel={handleRechargeCancel}
+                />
+              ) : (
+                <Button disabled className="w-full">
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Saisissez un montant (min. 1 000 FCFA)
+                </Button>
+              )}
+
+              <div className="flex space-x-3">
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setModalMode('reservation');
+                    setRechargeAmount('');
+                  }}
+                  className="flex-1"
+                >
+                  Annuler
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setModalMode('reservation')} 
+                  className="flex-1"
+                >
+                  Retour à la réservation
+                </Button>
+              </div>
             </div>
 
             {/* Note de sécurité */}
