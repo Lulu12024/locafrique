@@ -1,103 +1,252 @@
-// import { useState, useEffect } from 'react';
-// import { useAuth } from '@/hooks/auth';
-// import { supabase } from '@/integrations/supabase/client';
+// src/hooks/useEnhancedWallet.ts - Hook amélioré pour le portefeuille
 
-// export interface WalletTransaction {
-//   id: string;
-//   amount: number;
-//   type: 'credit' | 'debit' | 'commission' | 'refund';
-//   description: string;
-//   reference_id?: string;
-//   commission_amount?: number;
-//   status: 'pending' | 'completed' | 'failed';
-//   created_at: string;
-//   payment_method?: string;
-// }
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/hooks/auth';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/components/ui/use-toast';
 
-// export function useEnhancedWallet() {
-//   const { user } = useAuth();
-//   const [wallet, setWallet] = useState(null);
-//   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
-//   const [isLoading, setIsLoading] = useState(false);
+export interface WalletTransaction {
+  id: string;
+  amount: number;
+  transaction_type: 'credit' | 'debit' | 'commission' | 'refund';
+  description: string;
+  reference_id?: string;
+  booking_id?: string;
+  commission_amount?: number;
+  platform_fee?: number;
+  payment_method?: string;
+  status: 'pending' | 'completed' | 'failed';
+  created_at: string;
+}
 
-//   const loadWalletData = async () => {
-//     if (!user) return;
+export interface WalletData {
+  id: string;
+  balance: number;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function useEnhancedWallet() {
+  const { user } = useAuth();
+  const [wallet, setWallet] = useState<WalletData | null>(null);
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRecharging, setIsRecharging] = useState(false);
+
+  // Charger les données du portefeuille
+  const loadWalletData = useCallback(async () => {
+    if (!user) return;
     
-//     setIsLoading(true);
-//     try {
-//       // Charger le portefeuille
-//       const { data: walletData, error: walletError } = await supabase
-//         .from('wallets')
-//         .select('*')
-//         .eq('user_id', user.id)
-//         .single();
+    setIsLoading(true);
+    try {
+      // Créer ou récupérer le portefeuille
+      const { data: walletData, error: walletError } = await supabase.rpc(
+        'ensure_user_wallet',
+        { p_user_id: user.id }
+      );
 
-//       if (walletError && walletError.code === 'PGRST116') {
-//         // Créer un nouveau portefeuille si inexistant
-//         const { data: newWallet } = await supabase
-//           .from('wallets')
-//           .insert({ user_id: user.id, balance: 0 })
-//           .select()
-//           .single();
-//         setWallet(newWallet);
-//       } else {
-//         setWallet(walletData);
-//       }
+      if (walletError) {
+        throw walletError;
+      }
 
-//       // Charger les transactions
-//       const { data: transactionsData } = await supabase
-//         .from('wallet_transactions')
-//         .select('*')
-//         .eq('wallet_id', walletData?.id || newWallet?.id)
-//         .order('created_at', { ascending: false })
-//         .limit(50);
+      // Récupérer les détails du portefeuille
+      const { data: walletDetails, error: detailsError } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
 
-//       setTransactions(transactionsData || []);
-//     } catch (error) {
-//       console.error('Erreur lors du chargement du portefeuille:', error);
-//     } finally {
-//       setIsLoading(false);
-//     }
-//   };
+      if (detailsError) {
+        throw detailsError;
+      }
 
-//   const createTransaction = async (
-//     amount: number,
-//     type: WalletTransaction['type'],
-//     description: string,
-//     referenceId?: string
-//   ) => {
-//     if (!wallet) return { success: false, error: 'Portefeuille non trouvé' };
+      setWallet(walletDetails);
 
-//     try {
-//       const { data, error } = await supabase.rpc('create_wallet_transaction', {
-//         p_wallet_id: wallet.id,
-//         p_amount: amount,
-//         p_transaction_type: type,
-//         p_description: description,
-//         p_reference_id: referenceId
-//       });
+      // Charger les transactions
+      const { data: transactionsData, error: transactionsError } = await supabase
+        .from('wallet_transactions')
+        .select('*')
+        .eq('wallet_id', walletDetails.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-//       if (error) throw error;
+      if (transactionsError) {
+        throw transactionsError;
+      }
 
-//       // Recharger les données
-//       await loadWalletData();
-      
-//       return { success: true, data };
-//     } catch (error) {
-//       console.error('Erreur lors de la création de transaction:', error);
-//       return { success: false, error: error.message };
-//     }
-//   };
+      setTransactions(transactionsData || []);
 
-//   useEffect(() => {
-//     loadWalletData();
-//   }, [user]);
+    } catch (error: any) {
+      console.error('Erreur chargement portefeuille:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les données du portefeuille",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
 
-//   return {
-//     wallet,
-//     transactions,
-//     isLoading,
-//     createTransaction,
-//     refreshWallet: loadWalletData
-//   };
-// }
+  // Recharger le portefeuille
+  const rechargeWallet = async (amount: number, paymentMethod: 'stripe' | 'kakiapay') => {
+    if (!user || amount <= 0) {
+      toast({
+        title: "Données invalides",
+        description: "Montant invalide ou utilisateur non connecté",
+        variant: "destructive"
+      });
+      return { success: false };
+    }
+
+    setIsRecharging(true);
+    try {
+      const functionName = paymentMethod === 'stripe' 
+        ? 'create-wallet-recharge' 
+        : 'create-kakiapay-recharge';
+
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body: {
+          amount: amount,
+          payment_method: paymentMethod,
+          currency: 'xof'
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data?.url || data?.checkout_url) {
+        // Ouvrir l'URL de paiement
+        const paymentUrl = data.url || data.checkout_url;
+        window.open(paymentUrl, '_blank');
+        
+        toast({
+          title: "Redirection vers le paiement",
+          description: `Redirection vers ${paymentMethod === 'stripe' ? 'Stripe' : 'KakiaPay'}`,
+        });
+
+        return { success: true, url: paymentUrl };
+      } else {
+        throw new Error("URL de paiement non reçue");
+      }
+
+    } catch (error: any) {
+      console.error('Erreur recharge:', error);
+      toast({
+        title: "Erreur de recharge",
+        description: error.message || "Une erreur s'est produite",
+        variant: "destructive"
+      });
+      return { success: false, error: error.message };
+    } finally {
+      setIsRecharging(false);
+    }
+  };
+
+  // Effectuer une transaction (débit/crédit)
+  const createTransaction = async (
+    amount: number,
+    type: WalletTransaction['transaction_type'],
+    description: string,
+    referenceId?: string,
+    bookingId?: string
+  ) => {
+    if (!user || !wallet) {
+      throw new Error("Utilisateur non connecté ou portefeuille non trouvé");
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('create_wallet_transaction_secure', {
+        p_wallet_id: wallet.id,
+        p_amount: amount,
+        p_transaction_type: type,
+        p_description: description,
+        p_reference_id: referenceId,
+        p_booking_id: bookingId
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // Recharger les données après la transaction
+      await loadWalletData();
+
+      return data;
+    } catch (error: any) {
+      console.error('Erreur transaction:', error);
+      throw error;
+    }
+  };
+
+  // Vérifier si le solde est suffisant
+  const hasSufficientBalance = (amount: number): boolean => {
+    return wallet ? wallet.balance >= amount : false;
+  };
+
+  // Calculer les statistiques
+  const getStats = () => {
+    const totalCredits = transactions
+      .filter(t => t.transaction_type === 'credit' || t.transaction_type === 'refund')
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    const totalDebits = transactions
+      .filter(t => t.transaction_type === 'debit')
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    const totalCommissions = transactions
+      .reduce((sum, t) => sum + (t.commission_amount || 0), 0);
+
+    return {
+      currentBalance: wallet?.balance || 0,
+      totalCredits,
+      totalDebits,
+      totalCommissions,
+      transactionCount: transactions.length,
+      lastTransactionDate: transactions[0]?.created_at
+    };
+  };
+
+  // Écouter les changements en temps réel
+  useEffect(() => {
+    if (user) {
+      loadWalletData();
+
+      // Souscrire aux changements de portefeuille
+      const walletSubscription = supabase
+        .channel('wallet-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'wallets',
+            filter: `user_id=eq.${user.id}`
+          },
+          () => {
+            loadWalletData();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        walletSubscription.unsubscribe();
+      };
+    }
+  }, [user, loadWalletData]);
+
+  return {
+    wallet,
+    transactions,
+    isLoading,
+    isRecharging,
+    stats: getStats(),
+    loadWalletData,
+    rechargeWallet,
+    createTransaction,
+    hasSufficientBalance
+  };
+}
