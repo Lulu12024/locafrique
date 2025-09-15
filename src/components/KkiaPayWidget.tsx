@@ -79,7 +79,7 @@ export const KkiaPayWidget: React.FC<KkiaPayWidgetProps> = ({
         body: {
           transactionId: transactionRef,
           external_reference: response.transactionId || response.transaction_id,
-          payment_method: 'kkiapay'
+          payment_method: 'kakiapay'
         }
       });
 

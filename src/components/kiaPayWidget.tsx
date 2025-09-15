@@ -79,7 +79,7 @@ export const KkiaPayWidget: React.FC<KkiaPayWidgetProps> = ({
         body: {
           transactionId: transactionRef,
           external_reference: response.transactionId || response.transaction_id,
-          payment_method: 'kkiapay'
+          payment_method: 'kakiapay'
         }
       });
 
@@ -153,7 +153,7 @@ export const KkiaPayWidget: React.FC<KkiaPayWidgetProps> = ({
       // Étape 1: Préparer la transaction côté serveur
       console.log('🔄 Préparation de la transaction KkiaPay...');
       
-      const { data, error } = await supabase.functions.invoke('create-kkiapay-recharge', {
+      const { data, error } = await supabase.functions.invoke('create-kakiapay-recharge', {
         body: {
           amount: amount,
           currency: 'xof'
