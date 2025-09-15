@@ -208,6 +208,20 @@ function ReservationModal({
   // Montants rapides pour la recharge
   const quickAmounts = [10000, 25000, 50000, 100000, 200000];
   
+  const feeCalculations = useMemo(() => {
+    const baseCost = calculatedTotal;
+    const commissionAmount = Math.round(baseCost * 0.05); // 5%
+    const platformFee = Math.round(baseCost * 0.02); // 2%
+    const totalWithFees = baseCost + commissionAmount + platformFee;
+    
+    return {
+      baseCost,
+      commissionAmount,
+      platformFee,
+      totalWithFees
+    };
+  }, [calculatedTotal]);
+
   // États pour les détails de réservation
   const [reservationDetails, setReservationDetails] = useState({
     contactPhone: '',
@@ -256,7 +270,7 @@ function ReservationModal({
   };
 
   // Vérifier si le solde est suffisant
-  const isSufficientBalance = walletBalance >= calculatedTotal;
+  const isSufficientBalance = walletBalance >= feeCalculations.totalWithFees;
 
   // Gestionnaires pour le widget KkiaPay
   const handleRechargeSuccess = (response: any) => {
@@ -425,10 +439,16 @@ function ReservationModal({
       return;
     }
 
-    if (paymentMethod === 'wallet' && !isSufficientBalance) {
+    // Calculs des frais et commissions
+    const baseCost = calculatedTotal;
+    const commissionAmount = Math.round(baseCost * 0.05); // 5%
+    const platformFee = Math.round(baseCost * 0.02); // 2%
+    const totalWithFees = baseCost + commissionAmount + platformFee;
+
+    if (paymentMethod === 'wallet' && walletBalance < totalWithFees) {
       toast({
         title: "Solde insuffisant",
-        description: "Veuillez recharger votre portefeuille ou choisir un autre mode de paiement.",
+        description: `Il vous manque ${safeToLocaleString(totalWithFees - walletBalance)} FCFA pour cette réservation.`,
         variant: "destructive"
       });
       return;
@@ -439,7 +459,7 @@ function ReservationModal({
     try {
       console.log('🚀 Création de réservation...');
       
-      // Upload du document d'identité
+      // Upload du document d'identité (code existant)
       let documentUrl = null;
       if (reservationDetails.identityDocument) {
         try {
@@ -461,13 +481,13 @@ function ReservationModal({
         }
       }
 
-      // Créer la réservation
+      // Créer la réservation avec les frais corrects
       const bookingData = {
         equipment_id: validEquipment.id,
         renter_id: user.id,
         start_date: selectedStartDate.toISOString().split('T')[0],
         end_date: selectedEndDate.toISOString().split('T')[0],
-        total_price: calculatedTotal,
+        total_price: baseCost, // Prix de base sans frais
         deposit_amount: validEquipment.deposit_amount,
         status: 'pending',
         payment_status: paymentMethod === 'wallet' ? 'paid' : 'pending',
@@ -477,8 +497,8 @@ function ReservationModal({
         delivery_address: reservationDetails.deliveryAddress || null,
         special_requests: reservationDetails.specialRequests || null,
         automatic_validation: false,
-        commission_amount: calculatedTotal * 0.05,
-        platform_fee: calculatedTotal * 0.02,
+        commission_amount: commissionAmount, // Commission de 5%
+        platform_fee: platformFee, // Frais de 2%
         identity_verified: true,
         identity_document_url: documentUrl
       };
@@ -493,8 +513,8 @@ function ReservationModal({
         throw bookingError;
       }
 
-      // Déduction du portefeuille si nécessaire
-      if (paymentMethod === 'wallet' && calculatedTotal > 0) {
+      // Déduction du portefeuille avec le montant total (base + frais)
+      if (paymentMethod === 'wallet' && totalWithFees > 0) {
         const { data: walletData } = await supabase
           .from('wallets')
           .select('id')
@@ -506,9 +526,9 @@ function ReservationModal({
             'create_wallet_transaction_secure',
             {
               p_wallet_id: walletData.id,
-              p_amount: calculatedTotal,
+              p_amount: totalWithFees, // Débiter le montant total avec frais
               p_transaction_type: 'debit',
-              p_description: `Réservation ${validEquipment.title} - En attente d'approbation`,
+              p_description: `Réservation ${validEquipment.title} (${safeToLocaleString(baseCost)} + frais ${safeToLocaleString(commissionAmount + platformFee)}) - En attente d'approbation`,
               p_reference_id: booking.id,
               p_booking_id: booking.id
             }
@@ -523,14 +543,14 @@ function ReservationModal({
         }
       }
 
-      // Notifications
+      // Notifications (code existant)
       if (validEquipment.owner_id && user.email) {
         const notifications = [
           {
             user_id: validEquipment.owner_id,
             type: 'new_booking_request',
             title: '📋 Nouvelle demande de réservation',
-            message: `${user.email} souhaite réserver "${validEquipment.title}" du ${safeFormatDate(selectedStartDate, 'long')} au ${safeFormatDate(selectedEndDate, 'long')} pour ${safeToLocaleString(calculatedTotal)} FCFA.`,
+            message: `${user.email} souhaite réserver "${validEquipment.title}" du ${safeFormatDate(selectedStartDate, 'long')} au ${safeFormatDate(selectedEndDate, 'long')} pour ${safeToLocaleString(baseCost)} FCFA (+ frais ${safeToLocaleString(commissionAmount + platformFee)} FCFA).`,
             booking_id: booking.id
           },
           {
@@ -548,7 +568,7 @@ function ReservationModal({
       toast({
         title: "🎉 Demande envoyée !",
         description: paymentMethod === 'wallet' 
-          ? `Montant débité: ${safeToLocaleString(calculatedTotal)} FCFA • En attente d'approbation`
+          ? `Montant débité: ${safeToLocaleString(totalWithFees)} FCFA (location + frais) • En attente d'approbation`
           : "Votre demande a été envoyée au propriétaire pour approbation",
         duration: 5000
       });
@@ -858,7 +878,7 @@ function ReservationModal({
                           <AlertDescription className="text-orange-700">
                             <div className="flex items-center justify-between">
                               <span>
-                                Solde insuffisant. Il vous manque {safeToLocaleString(calculatedTotal - walletBalance)} FCFA.
+                                Solde insuffisant. Il vous manque {safeToLocaleString(feeCalculations.totalWithFees - walletBalance)} FCFA.
                               </span>
                               <Button
                                 size="sm"
@@ -943,32 +963,33 @@ function ReservationModal({
                     </CardContent>
                   </Card>
                   
-                  {/* Informations de paiement */}
+                  {/* Détail des coûts avec commissions */}
                   <Card className="bg-blue-50 border-blue-200">
                     <CardContent className="p-4">
-                      <h4 className="font-medium mb-2">Paiement</h4>
+                      <h4 className="font-medium mb-3">Détail des coûts</h4>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span>Méthode:</span>
-                          <span>{paymentMethod === 'wallet' ? 'Portefeuille' : 'Carte bancaire'}</span>
+                          <span>Coût de location:</span>
+                          <span>{safeToLocaleString(feeCalculations.baseCost)} FCFA</span>
+                        </div>
+                        <div className="flex justify-between text-orange-600">
+                          <span>Commission plateforme (5%):</span>
+                          <span>+ {safeToLocaleString(feeCalculations.commissionAmount)} FCFA</span>
+                        </div>
+                        <div className="flex justify-between text-orange-600">
+                          <span>Frais de service (2%):</span>
+                          <span>+ {safeToLocaleString(feeCalculations.platformFee)} FCFA</span>
                         </div>
                         <Separator />
                         <div className="flex justify-between font-medium text-lg">
-                          <span>Total:</span>
-                          <span className="text-green-600">{safeToLocaleString(calculatedTotal)} FCFA</span>
+                          <span>Total à débiter:</span>
+                          <span className="text-red-600">
+                            {safeToLocaleString(feeCalculations.totalWithFees)} FCFA
+                          </span>
                         </div>
-                        {paymentMethod === 'wallet' && (
-                          <>
-                            <div className="flex justify-between">
-                              <span>Solde actuel:</span>
-                              <span>{safeToLocaleString(walletBalance)} FCFA</span>
-                            </div>
-                            <div className="flex justify-between text-red-600">
-                              <span>Après déduction:</span>
-                              <span>{safeToLocaleString(walletBalance - calculatedTotal)} FCFA</span>
-                            </div>
-                          </>
-                        )}
+                        <div className="text-xs text-gray-600 mt-2">
+                          * Les frais sont inclus dans le montant débité de votre portefeuille
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -988,7 +1009,7 @@ function ReservationModal({
                       <>
                         <CheckCircle className="mr-2 h-4 w-4" />
                         {paymentMethod === 'wallet' 
-                          ? `Réserver & Débiter ${safeToLocaleString(calculatedTotal)} FCFA`
+                          ? `Réserver & Débiter ${safeToLocaleString(feeCalculations.totalWithFees)} FCFA`
                           : 'Envoyer la demande de réservation'
                         }
                       </>
@@ -1039,7 +1060,7 @@ function ReservationModal({
                 Solde actuel: <span className="font-medium text-emerald-600">{safeToLocaleString(walletBalance)} FCFA</span>
               </p>
               <p className="text-gray-500 text-xs mt-1">
-                Il vous manque: <span className="font-medium text-red-600">{safeToLocaleString(calculatedTotal - walletBalance)} FCFA</span>
+                Il vous manque: <span className="font-medium text-red-600">{safeToLocaleString(feeCalculations.totalWithFees - walletBalance)} FCFA</span>
               </p>
             </div>
 

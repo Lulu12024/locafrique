@@ -1,5 +1,5 @@
 // supabase/functions/verify-wallet-recharge/index.ts
-// VERSION CORRIGÉE AVEC DÉBOGAGE AMÉLIORÉ
+// VERSION RÉELLEMENT CORRIGÉE - SUPPRESSION DE supabaseService.raw()
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
@@ -91,42 +91,56 @@ serve(async (req) => {
           console.log("✅ Paiement KakiaPay vérifié, mise à jour...");
           
           // Mettre à jour le statut de la transaction
+          console.log(`🔄 Mise à jour statut transaction ${pendingTransaction.id}...`);
           const { error: updateError } = await supabaseService
             .from('wallet_transactions')
             .update({ status: 'completed' })
             .eq('id', pendingTransaction.id);
 
           if (updateError) {
+            console.error("❌ Erreur mise à jour transaction:", updateError);
             throw new Error(`Erreur mise à jour transaction: ${updateError.message}`);
           }
+          console.log("✅ Statut transaction mis à jour");
 
-          // Mettre à jour le solde du portefeuille
-          const { error: balanceError } = await supabaseService
-            .from('wallets')
-            .update({ 
-              balance: supabaseService.raw(`balance + ${pendingTransaction.amount}`)
-            })
-            .eq('id', pendingTransaction.wallet_id);
-
-          if (balanceError) {
-            throw new Error(`Erreur mise à jour solde: ${balanceError.message}`);
-          }
-
-          // Récupérer le nouveau solde
-          const { data: updatedWallet } = await supabaseService
+          // CORRECTION PRINCIPALE : Mettre à jour le solde sans utiliser .raw()
+          console.log(`🔄 Récupération solde actuel du portefeuille ${pendingTransaction.wallet_id}...`);
+          const { data: currentWallet, error: walletError } = await supabaseService
             .from('wallets')
             .select('balance')
             .eq('id', pendingTransaction.wallet_id)
             .single();
 
-          console.log(`✅ Recharge réussie: ${pendingTransaction.amount} FCFA ajoutés`);
+          if (walletError) {
+            console.error("❌ Erreur récupération portefeuille:", walletError);
+            throw new Error(`Erreur récupération portefeuille: ${walletError.message}`);
+          }
+
+          const currentBalance = currentWallet.balance || 0;
+          const newBalance = currentBalance + pendingTransaction.amount;
+          console.log(`🔢 Calcul solde: ${currentBalance} + ${pendingTransaction.amount} = ${newBalance}`);
+
+          // Mise à jour du solde avec la nouvelle valeur calculée
+          console.log(`🔄 Mise à jour solde portefeuille...`);
+          const { error: balanceError } = await supabaseService
+            .from('wallets')
+            .update({ balance: newBalance })
+            .eq('id', pendingTransaction.wallet_id);
+
+          if (balanceError) {
+            console.error("❌ Erreur mise à jour solde:", balanceError);
+            throw new Error(`Erreur mise à jour solde: ${balanceError.message}`);
+          }
+
+          console.log(`✅ Recharge réussie: ${pendingTransaction.amount} FCFA ajoutés. Nouveau solde: ${newBalance} FCFA`);
 
           return new Response(JSON.stringify({ 
             success: true,
             status: 'completed',
             amount: pendingTransaction.amount,
-            new_balance: updatedWallet?.balance || 0,
-            transaction_id: pendingTransaction.id
+            new_balance: newBalance,
+            transaction_id: pendingTransaction.id,
+            message: `Recharge de ${pendingTransaction.amount} FCFA effectuée avec succès`
           }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 200,
@@ -147,11 +161,13 @@ serve(async (req) => {
         
       } catch (verifyError) {
         console.error("❌ Erreur vérification KakiaPay:", verifyError);
+        console.error("❌ Stack trace:", verifyError.stack);
         
         return new Response(JSON.stringify({ 
           success: false, 
           status: 'verification_failed',
-          message: "Impossible de vérifier le paiement avec KakiaPay"
+          message: `Erreur détaillée: ${verifyError.message}`,
+          error_type: verifyError.name || 'Unknown'
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 400,
