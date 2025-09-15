@@ -439,16 +439,20 @@ function ReservationModal({
       return;
     }
 
-    // Calculs des frais et commissions
     const baseCost = calculatedTotal;
-    const commissionAmount = Math.round(baseCost * 0.05); // 5%
-    const platformFee = Math.round(baseCost * 0.02); // 2%
+    const commissionAmount = Math.round(baseCost * 0.05);
+    const platformFee = Math.round(baseCost * 0.02);
     const totalWithFees = baseCost + commissionAmount + platformFee;
+
+    console.log('💰 Calculs de frais:', {
+      baseCost, commissionAmount, platformFee, totalWithFees, 
+      walletBalance, isSufficient: walletBalance >= totalWithFees
+    });
 
     if (paymentMethod === 'wallet' && walletBalance < totalWithFees) {
       toast({
         title: "Solde insuffisant",
-        description: `Il vous manque ${safeToLocaleString(totalWithFees - walletBalance)} FCFA pour cette réservation.`,
+        description: `Il vous manque ${safeToLocaleString(totalWithFees - walletBalance)} FCFA.`,
         variant: "destructive"
       });
       return;
@@ -457,9 +461,9 @@ function ReservationModal({
     setIsSubmitting(true);
 
     try {
-      console.log('🚀 Création de réservation...');
+      console.log('🚀 Début création réservation...');
       
-      // Upload du document d'identité (code existant)
+      // Upload du document d'identité
       let documentUrl = null;
       if (reservationDetails.identityDocument) {
         try {
@@ -475,19 +479,20 @@ function ReservationModal({
               .from('identity-documents')
               .getPublicUrl(uploadData.path);
             documentUrl = publicUrlData.publicUrl;
+            console.log('📎 Document uploadé:', documentUrl);
           }
         } catch (uploadErr) {
           console.error("❌ Erreur upload:", uploadErr);
         }
       }
 
-      // Créer la réservation avec les frais corrects
+      // Créer la réservation
       const bookingData = {
         equipment_id: validEquipment.id,
         renter_id: user.id,
         start_date: selectedStartDate.toISOString().split('T')[0],
         end_date: selectedEndDate.toISOString().split('T')[0],
-        total_price: baseCost, // Prix de base sans frais
+        total_price: baseCost,
         deposit_amount: validEquipment.deposit_amount,
         status: 'pending',
         payment_status: paymentMethod === 'wallet' ? 'paid' : 'pending',
@@ -497,11 +502,13 @@ function ReservationModal({
         delivery_address: reservationDetails.deliveryAddress || null,
         special_requests: reservationDetails.specialRequests || null,
         automatic_validation: false,
-        commission_amount: commissionAmount, // Commission de 5%
-        platform_fee: platformFee, // Frais de 2%
+        commission_amount: commissionAmount,
+        platform_fee: platformFee,
         identity_verified: true,
         identity_document_url: documentUrl
       };
+
+      console.log('📋 Création réservation avec données:', bookingData);
 
       const { data: booking, error: bookingError } = await supabase
         .from('bookings')
@@ -510,40 +517,101 @@ function ReservationModal({
         .single();
 
       if (bookingError) {
+        console.error('❌ Erreur création réservation:', bookingError);
         throw bookingError;
       }
 
-      // Déduction du portefeuille avec le montant total (base + frais)
+      console.log('✅ Réservation créée:', booking.id);
+
+      // Déduction du portefeuille avec diagnostic complet
       if (paymentMethod === 'wallet' && totalWithFees > 0) {
-        const { data: walletData } = await supabase
+        console.log('💳 Début déduction portefeuille...');
+        
+        // Récupérer le portefeuille
+        const { data: walletData, error: walletError } = await supabase
           .from('wallets')
-          .select('id')
+          .select('id, balance, user_id')
           .eq('user_id', user.id)
           .single();
 
-        if (walletData?.id) {
-          const { data: transactionData, error: transactionError } = await supabase.rpc(
-            'create_wallet_transaction_secure',
-            {
-              p_wallet_id: walletData.id,
-              p_amount: totalWithFees, // Débiter le montant total avec frais
-              p_transaction_type: 'debit',
-              p_description: `Réservation ${validEquipment.title} (${safeToLocaleString(baseCost)} + frais ${safeToLocaleString(commissionAmount + platformFee)}) - En attente d'approbation`,
-              p_reference_id: booking.id,
-              p_booking_id: booking.id
-            }
-          );
-
-          if (transactionError || !transactionData?.success) {   
-            await supabase.from('bookings').delete().eq('id', booking.id);
-            throw new Error("Erreur lors de la déduction du portefeuille");
-          }
-
-          await loadWalletBalance();
+        if (walletError || !walletData?.id) {
+          console.error('❌ Portefeuille non trouvé:', walletError);
+          await supabase.from('bookings').delete().eq('id', booking.id);
+          throw new Error(`Portefeuille introuvable: ${walletError?.message || 'ID manquant'}`);
         }
+
+        console.log('💰 Portefeuille trouvé:', {
+          id: walletData.id,
+          balance: walletData.balance,
+          userId: walletData.user_id,
+          authUser: user.id
+        });
+
+        // Paramètres RPC
+        const rpcParams = {
+          p_wallet_id: walletData.id,
+          p_amount: totalWithFees,
+          p_transaction_type: 'debit',
+          p_description: `Réservation ${validEquipment.title} (${safeToLocaleString(baseCost)} + frais ${safeToLocaleString(commissionAmount + platformFee)}) - En attente d'approbation`,
+          p_reference_id: booking.id,
+          p_booking_id: booking.id
+        };
+
+        console.log('📤 Appel RPC avec paramètres:', rpcParams);
+
+        // Appel RPC avec gestion d'erreur détaillée
+        const { data: transactionData, error: transactionError } = await supabase.rpc(
+          'create_wallet_transaction_secure',
+          rpcParams
+        );
+
+        console.log('📥 Réponse RPC:', { 
+          transactionData, 
+          transactionError,
+          hasData: !!transactionData,
+          dataType: typeof transactionData
+        });
+
+        // Gestion des erreurs RPC
+        if (transactionError) {
+          console.error('❌ Erreur RPC détaillée:', {
+            message: transactionError.message,
+            details: transactionError.details,
+            hint: transactionError.hint,
+            code: transactionError.code
+          });
+          
+          await supabase.from('bookings').delete().eq('id', booking.id);
+          
+          let errorMsg = "Erreur de paiement";
+          if (transactionError.message?.includes('function')) {
+            errorMsg = "Fonction de paiement non disponible. Contactez le support.";
+          } else if (transactionError.message?.includes('permission')) {
+            errorMsg = "Permission refusée. Reconnectez-vous.";
+          } else {
+            errorMsg = `Erreur RPC: ${transactionError.message}`;
+          }
+          
+          throw new Error(errorMsg);
+        }
+
+        if (!transactionData) {
+          console.error('❌ Aucune donnée retournée par RPC');
+          await supabase.from('bookings').delete().eq('id', booking.id);
+          throw new Error("Aucune réponse de la fonction de paiement");
+        }
+
+        if (transactionData.success === false) {
+          console.error('❌ Échec de transaction:', transactionData);
+          await supabase.from('bookings').delete().eq('id', booking.id);
+          throw new Error(`Erreur: ${transactionData.error || 'Transaction échouée'}`);
+        }
+
+        console.log('✅ Déduction réussie:', transactionData);
+        await loadWalletBalance();
       }
 
-      // Notifications (code existant)
+      // Notifications
       if (validEquipment.owner_id && user.email) {
         const notifications = [
           {
@@ -577,7 +645,12 @@ function ReservationModal({
       onClose();
 
     } catch (error: any) {
-      console.error("❌ Erreur lors de la réservation:", error);
+      console.error("❌ Erreur complète:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      
       toast({
         title: "Erreur de réservation",
         description: error.message || "Une erreur s'est produite. Veuillez réessayer.",
