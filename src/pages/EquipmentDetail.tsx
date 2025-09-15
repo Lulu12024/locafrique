@@ -38,6 +38,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import ReservationModal from '@/components/booking/ReservationModal';
 import { useAuth } from '@/hooks/auth';
+import { useEquipmentReviews } from '@/hooks/useEquipmentReviews';
+import type { EquipmentReview } from '@/hooks/useEquipmentReviews';
 
 const EquipmentDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -51,6 +53,10 @@ const EquipmentDetail = () => {
   const [isLiked, setIsLiked] = useState(false);
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [viewCount, setViewCount] = useState(0);
+  const { fetchEquipmentReviews, fetchOwnerStats } = useEquipmentReviews();
+  const [realEquipmentReviews, setRealEquipmentReviews] = useState<EquipmentReview[]>([]);
+  const [realOwnerStats, setRealOwnerStats] = useState({ averageRating: 0, totalReviews: 0 });
+
 
   // Données enrichies avec vraies valeurs
   const [equipmentStats, setEquipmentStats] = useState({
@@ -137,19 +143,58 @@ const EquipmentDetail = () => {
         setEquipmentStats(prev => ({
           ...prev,
           totalBookings,
-          lastBookingDate: lastBooking?.created_at || null
+          lastBookingDate: lastBooking?.created_at || null,
+          responseRate: 95 // Garder cette valeur fixe pour l'instant
         }));
 
-        console.log("✅ Statistiques chargées:", { totalBookings });
+        console.log("✅ Statistiques réservations chargées:", { totalBookings });
       }
 
-      // Simuler d'autres statistiques (en attendant d'avoir un système de reviews)
-      setEquipmentStats(prev => ({
-        ...prev,
-        averageRating: 4.8,
-        reviewCount: Math.max(1, Math.floor(prev.totalBookings * 0.7)),
-        responseRate: 95
-      }));
+      // NOUVEAU: Charger les vraies évaluations de l'équipement
+      try {
+        const reviews = await fetchEquipmentReviews(equipmentId);
+        setRealEquipmentReviews(reviews);
+        
+        if (reviews.length > 0) {
+          const avgRating = reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
+          setEquipmentStats(prev => ({
+            ...prev,
+            averageRating: Math.round(avgRating * 10) / 10,
+            reviewCount: reviews.length
+          }));
+          console.log("✅ Vraies évaluations équipement chargées:", { 
+            count: reviews.length, 
+            average: Math.round(avgRating * 10) / 10 
+          });
+        } else {
+          // Pas d'avis pour cet équipement
+          setEquipmentStats(prev => ({
+            ...prev,
+            averageRating: 0,
+            reviewCount: 0
+          }));
+          console.log("ℹ️ Aucune évaluation pour cet équipement");
+        }
+      } catch (reviewError) {
+        console.error("❌ Erreur lors du chargement des avis:", reviewError);
+        // Fallback en cas d'erreur
+        setEquipmentStats(prev => ({
+          ...prev,
+          averageRating: 0,
+          reviewCount: 0
+        }));
+      }
+
+      // NOUVEAU: Charger les stats du propriétaire
+      if (equipment?.owner_id) {
+        try {
+          const ownerStatistics = await fetchOwnerStats(equipment.owner_id);
+          setRealOwnerStats(ownerStatistics);
+          console.log("✅ Stats propriétaire chargées:", ownerStatistics);
+        } catch (ownerError) {
+          console.error("❌ Erreur lors du chargement des stats propriétaire:", ownerError);
+        }
+      }
 
     } catch (error) {
       console.error("❌ Erreur lors du chargement des statistiques:", error);
@@ -429,8 +474,12 @@ const EquipmentDetail = () => {
               <div className="flex items-center space-x-6 mb-6">
                 <div className="flex items-center">
                   <Star className="h-5 w-5 text-yellow-500 fill-current" />
-                  <span className="ml-1 font-medium">{equipmentStats.averageRating}</span>
-                  <span className="ml-1 text-gray-600">({equipmentStats.reviewCount} avis)</span>
+                  <span className="ml-1 font-medium">
+                    {equipmentStats.reviewCount > 0 ? equipmentStats.averageRating : '--'}
+                  </span>
+                  <span className="ml-1 text-gray-600">
+                    ({equipmentStats.reviewCount} avis)
+                  </span>
                 </div>
                 <div className="flex items-center text-gray-600">
                   <Users className="h-5 w-5 mr-1" />
@@ -507,7 +556,12 @@ const EquipmentDetail = () => {
                     <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">
                       <div className="flex items-center">
                         <Star className="h-4 w-4 text-yellow-500 fill-current mr-1" />
-                        <span>4.9 (156 avis)</span>
+                        <span>
+                          {realOwnerStats.totalReviews > 0 
+                            ? `${realOwnerStats.averageRating} (${realOwnerStats.totalReviews} avis)` 
+                            : 'Nouveau propriétaire'
+                          }
+                        </span>
                       </div>
                       <span>Taux de réponse: {equipmentStats.responseRate}%</span>
                       <span>Répond en 2h en moyenne</span>
@@ -534,33 +588,49 @@ const EquipmentDetail = () => {
               <CardContent className="p-6">
                 <h3 className="text-lg font-semibold mb-4">Dernières évaluations</h3>
                 <div className="space-y-4">
-                  {[
-                    { name: 'Marie K.', rating: 5, date: '2025-01-10', comment: 'Excellent matériel, propriétaire très professionnel' },
-                    { name: 'Jean D.', rating: 5, date: '2025-01-05', comment: 'Parfait pour mon chantier, je recommande' },
-                    { name: 'Sophie M.', rating: 4, date: '2024-12-28', comment: 'Bon équipement, livraison ponctuelle' }
-                  ].map((review, index) => (
-                    <div key={index} className="flex items-start justify-between border-b pb-3 last:border-b-0">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-medium">{review.name}</span>
-                          <div className="flex">
-                            {Array.from({ length: review.rating }, (_, i) => (
-                              <Star key={i} className="h-4 w-4 text-yellow-500 fill-current" />
-                            ))}
-                          </div>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1">{review.comment}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {new Date(review.date).toLocaleDateString('fr-FR')}
-                        </p>
+                  {realEquipmentReviews.length === 0 ? (
+                    // Aucun avis disponible
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Star className="h-8 w-8 text-gray-400" />
                       </div>
+                      <p className="text-gray-600 mb-2">Aucune évaluation pour le moment</p>
+                      <p className="text-sm text-gray-500">
+                        Soyez le premier à laisser un avis après avoir loué cet équipement !
+                      </p>
                     </div>
-                  ))}
+                  ) : (
+                    // Vraies évaluations
+                    realEquipmentReviews.slice(0, 3).map((review) => (
+                      <div key={review.id} className="flex items-start justify-between border-b pb-3 last:border-b-0">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium">
+                              {review.reviewer?.first_name} {review.reviewer?.last_name?.[0]}.
+                            </span>
+                            <div className="flex">
+                              {Array.from({ length: review.rating }, (_, i) => (
+                                <Star key={i} className="h-4 w-4 text-yellow-500 fill-current" />
+                              ))}
+                            </div>
+                          </div>
+                          {review.comment && (
+                            <p className="text-sm text-gray-600 mt-1">{review.comment}</p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-1">
+                            {new Date(review.created_at).toLocaleDateString('fr-FR')}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
-                <Button variant="outline" className="w-full mt-4">
-                  <Eye className="h-4 w-4 mr-2" />
-                  Voir tous les avis
-                </Button>
+                {realEquipmentReviews.length > 0 && (
+                  <Button variant="outline" className="w-full mt-4">
+                    <Eye className="h-4 w-4 mr-2" />
+                    Voir tous les avis ({realEquipmentReviews.length})
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>
