@@ -1,5 +1,5 @@
 // src/components/KkiaPayWidget.tsx
-// COMPOSANT REACT POUR LE WIDGET KKIAPAY
+// VERSION CORRIGÉE - RÉSOUT L'ERREUR DataCloneError
 
 import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,8 @@ declare global {
   interface Window {
     openKkiapayWidget: (config: any) => void;
     addKkiapayListener: (event: string, callback: (response: any) => void) => void;
+    removeKkiapayListener: (event: string, callback: (response: any) => void) => void;
+    kkiapay: any;
   }
 }
 
@@ -33,24 +35,23 @@ export const KkiaPayWidget: React.FC<KkiaPayWidgetProps> = ({
 }) => {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [kkiapayConfig, setKkiapayConfig] = useState<any>(null);
   const [scriptLoaded, setScriptLoaded] = useState(false);
+  const [transactionRef, setTransactionRef] = useState<string>('');
 
-  // Charger le script KkiaPay
+  // Charger le script KkiaPay une seule fois
   useEffect(() => {
+    // Vérifier si le script est déjà chargé
+    if (window.kkiapay || document.querySelector('script[src*="kkiapay"]')) {
+      setScriptLoaded(true);
+      return;
+    }
+
     const script = document.createElement('script');
     script.src = 'https://cdn.kkiapay.me/k.js';
     script.async = true;
     script.onload = () => {
       console.log('✅ Script KkiaPay chargé');
       setScriptLoaded(true);
-      
-      // Configurer les listeners KkiaPay
-      if (window.addKkiapayListener) {
-        window.addKkiapayListener('success', handleKkiapaySuccess);
-        window.addKkiapayListener('failed', handleKkiapayError);
-        window.addKkiapayListener('pending', handleKkiapayPending);
-      }
     };
     script.onerror = () => {
       console.error('❌ Erreur chargement script KkiaPay');
@@ -60,56 +61,25 @@ export const KkiaPayWidget: React.FC<KkiaPayWidgetProps> = ({
     document.head.appendChild(script);
 
     return () => {
-      // Nettoyer le script lors du démontage
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
+      // Nettoyer seulement si nécessaire
+      const existingScript = document.querySelector('script[src*="kkiapay"]');
+      if (existingScript && document.head.contains(existingScript)) {
+        document.head.removeChild(existingScript);
       }
     };
   }, []);
 
-  // Préparer la configuration KkiaPay
-  const prepareKkiapayConfig = async () => {
-    try {
-      setIsLoading(true);
-      
-      const { data, error } = await supabase.functions.invoke('create-kakiapay-recharge', {
-        body: {
-          amount: amount,
-          currency: 'xof'
-        }
-      });
-
-      if (error) throw error;
-
-      if (data?.kkiapay_config) {
-        setKkiapayConfig(data.kkiapay_config);
-        console.log('✅ Configuration KkiaPay préparée:', data.kkiapay_config);
-      } else {
-        throw new Error('Configuration KkiaPay non reçue');
-      }
-    } catch (error: any) {
-      console.error('❌ Erreur préparation KkiaPay:', error);
-      onError(error);
-      toast({
-        title: "Erreur configuration",
-        description: error.message || "Impossible de préparer le paiement",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Gestionnaires d'événements KkiaPay
-  const handleKkiapaySuccess = async (response: any) => {
+  // Gestionnaires d'événements KkiaPay (définis en dehors du render pour éviter les re-créations)
+  const handleSuccess = async (response: any) => {
     console.log('✅ Paiement KkiaPay réussi:', response);
     
     try {
       // Vérifier la transaction côté serveur
       const { data, error } = await supabase.functions.invoke('verify-wallet-recharge', {
         body: {
-          transactionId: response.transactionId || kkiapayConfig?.transaction_id,
-          payment_method: 'kakiapay'
+          transactionId: transactionRef,
+          external_reference: response.transactionId || response.transaction_id,
+          payment_method: 'kkiapay'
         }
       });
 
@@ -121,6 +91,9 @@ export const KkiaPayWidget: React.FC<KkiaPayWidgetProps> = ({
           title: "Recharge réussie !",
           description: `Votre portefeuille a été rechargé de ${data.amount?.toLocaleString()} FCFA`,
         });
+        
+        // Nettoyer les listeners
+        cleanupListeners();
       } else {
         throw new Error(data?.message || 'Vérification échouée');
       }
@@ -129,23 +102,24 @@ export const KkiaPayWidget: React.FC<KkiaPayWidgetProps> = ({
       onError(error);
       toast({
         title: "Erreur vérification",
-        description: "Le paiement n'a pas pu être vérifié",
+        description: error.message || "Le paiement n'a pas pu être vérifié",
         variant: "destructive"
       });
     }
   };
 
-  const handleKkiapayError = (response: any) => {
+  const handleFailure = (response: any) => {
     console.error('❌ Erreur paiement KkiaPay:', response);
     onError(response);
     toast({
       title: "Paiement échoué",
-      description: "Une erreur s'est produite lors du paiement",
+      description: response.message || "Une erreur s'est produite lors du paiement",
       variant: "destructive"
     });
+    cleanupListeners();
   };
 
-  const handleKkiapayPending = (response: any) => {
+  const handlePending = (response: any) => {
     console.log('⏳ Paiement KkiaPay en attente:', response);
     toast({
       title: "Paiement en cours",
@@ -153,8 +127,17 @@ export const KkiaPayWidget: React.FC<KkiaPayWidgetProps> = ({
     });
   };
 
-  // Ouvrir le widget KkiaPay
-  const openKkiapayWidget = () => {
+  // Fonction pour nettoyer les listeners
+  const cleanupListeners = () => {
+    if (window.removeKkiapayListener) {
+      window.removeKkiapayListener('success', handleSuccess);
+      window.removeKkiapayListener('failed', handleFailure);
+      window.removeKkiapayListener('pending', handlePending);
+    }
+  };
+
+  // Fonction principale pour gérer le paiement
+  const handlePayment = async () => {
     if (!scriptLoaded) {
       toast({
         title: "Widget non prêt",
@@ -164,48 +147,115 @@ export const KkiaPayWidget: React.FC<KkiaPayWidgetProps> = ({
       return;
     }
 
-    if (!kkiapayConfig) {
-      prepareKkiapayConfig().then(() => {
-        if (kkiapayConfig) {
-          launchWidget();
+    setIsLoading(true);
+    
+    try {
+      // Étape 1: Préparer la transaction côté serveur
+      console.log('🔄 Préparation de la transaction KkiaPay...');
+      
+      const { data, error } = await supabase.functions.invoke('create-kkiapay-recharge', {
+        body: {
+          amount: amount,
+          currency: 'xof'
         }
       });
-    } else {
-      launchWidget();
+
+      if (error) throw error;
+
+      if (!data?.kkiapay_config) {
+        throw new Error('Configuration KkiaPay non reçue');
+      }
+
+      console.log('✅ Configuration KkiaPay reçue');
+      const config = data.kkiapay_config;
+      setTransactionRef(config.transaction_id);
+
+      // Étape 2: Configurer les listeners AVANT de lancer le widget
+      if (window.addKkiapayListener) {
+        // Nettoyer les anciens listeners s'ils existent
+        cleanupListeners();
+        
+        // Ajouter les nouveaux listeners
+        window.addKkiapayListener('success', handleSuccess);
+        window.addKkiapayListener('failed', handleFailure);
+        window.addKkiapayListener('pending', handlePending);
+      }
+
+      // Étape 3: Lancer le widget KkiaPay SANS callback direct
+      const widgetConfig = {
+        amount: config.amount,
+        api_key: config.api_key,
+        sandbox: true, // Mode test - changez à false en production
+        data: config.external_reference,
+        name: user?.user_metadata?.full_name || user?.email || "Client",
+        email: user?.email || "",
+        phone: user?.user_metadata?.phone || "",
+        reason: `Recharge portefeuille - ${config.amount} FCFA`,
+        // ❌ PAS DE CALLBACK ICI - utilise les listeners à la place
+        // callback: (response) => { ... } // SUPPRIMÉ pour éviter DataCloneError
+      };
+
+      console.log('🚀 Lancement widget KkiaPay...');
+
+      // Essayer différentes méthodes de lancement
+      if (window.openKkiapayWidget) {
+        window.openKkiapayWidget(widgetConfig);
+      } else if (window.kkiapay) {
+        window.kkiapay(widgetConfig);
+      } else {
+        // Méthode alternative avec élément DOM
+        const widgetElement = document.createElement('kkiapay-widget');
+        widgetElement.setAttribute('amount', config.amount.toString());
+        widgetElement.setAttribute('key', config.api_key);
+        widgetElement.setAttribute('sandbox', 'true');
+        widgetElement.setAttribute('data', config.external_reference);
+        
+        document.body.appendChild(widgetElement);
+        
+        // Nettoyer après un délai
+        setTimeout(() => {
+          if (document.body.contains(widgetElement)) {
+            document.body.removeChild(widgetElement);
+          }
+        }, 100);
+      }
+
+      setIsLoading(false);
+
+    } catch (error: any) {
+      console.error('❌ Erreur préparation KkiaPay:', error);
+      onError(error);
+      toast({
+        title: "Erreur configuration",
+        description: error.message || "Impossible de préparer le paiement",
+        variant: "destructive"
+      });
+      setIsLoading(false);
     }
   };
 
-  const launchWidget = () => {
-    if (window.openKkiapayWidget && kkiapayConfig) {
-      console.log('🚀 Lancement widget KkiaPay avec config:', kkiapayConfig);
-      
-      window.openKkiapayWidget({
-        amount: kkiapayConfig.amount,
-        api_key: kkiapayConfig.api_key,
-        sandbox: true, // Changez à false en production
-        data: kkiapayConfig.data,
-        callback: kkiapayConfig.callback_url,
-        theme: "#0095ff",
-        name: user?.user_metadata?.full_name || "Client",
-        email: user?.email || "",
-        phone: user?.user_metadata?.phone || ""
-      });
-    } else {
-      console.error('❌ Widget KkiaPay non disponible ou configuration manquante');
-      onError(new Error('Widget KkiaPay non disponible'));
-    }
-  };
+  // Nettoyer les listeners au démontage du composant
+  useEffect(() => {
+    return () => {
+      cleanupListeners();
+    };
+  }, []);
 
   return (
     <Button
-      onClick={openKkiapayWidget}
-      disabled={disabled || isLoading}
+      onClick={handlePayment}
+      disabled={disabled || isLoading || !scriptLoaded}
       className="w-full bg-blue-600 hover:bg-blue-700 text-white"
     >
       {isLoading ? (
         <>
           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          Préparation...
+          Lancement KkiaPay...
+        </>
+      ) : !scriptLoaded ? (
+        <>
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          Chargement widget...
         </>
       ) : (
         <>
