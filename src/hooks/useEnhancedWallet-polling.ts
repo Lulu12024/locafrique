@@ -1,4 +1,4 @@
-// src/hooks/useEnhancedWallet.ts - Hook amélioré pour le portefeuille
+// src/hooks/useEnhancedWallet-polling.ts - Version avec polling uniquement
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/auth';
@@ -27,7 +27,7 @@ export interface WalletData {
   updated_at: string;
 }
 
-export function useEnhancedWallet() {
+export function useEnhancedWalletPolling() {
   const { user } = useAuth();
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
@@ -210,65 +210,34 @@ export function useEnhancedWallet() {
     };
   };
 
-  // Initialiser les données au montage et setup des subscriptions avec gestion d'erreur
+  // Utiliser uniquement le polling, pas de WebSocket
   useEffect(() => {
     if (!user) return;
 
-    // Charger les données initiales
+    console.log('🔄 Configuration du polling pour le portefeuille (mode sans WebSocket)');
+    
+    // Charger les données immédiatement
     loadWalletData();
 
-    // Configuration des subscriptions avec gestion d'erreur pour WebSocket
-    const setupSubscriptions = () => {
-      try {
-        // Vérifier si les WebSockets sont supportés
-        if (typeof WebSocket === 'undefined') {
-          console.warn('WebSockets non supportés, mode polling activé');
-          return;
-        }
+    // Configurer le polling toutes les 30 secondes
+    const pollingInterval = setInterval(() => {
+      loadWalletData();
+    }, 30000);
 
-        const walletSubscription = supabase
-          .channel('wallet-changes')
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'wallets',
-              filter: `user_id=eq.${user.id}`
-            },
-            (payload) => {
-              console.log('Changement portefeuille détecté:', payload);
-              loadWalletData();
-            }
-          )
-          .subscribe((status) => {
-            console.log('Statut souscription portefeuille:', status);
-            if (status === 'SUBSCRIPTION_ERROR') {
-              console.warn('Erreur souscription WebSocket, passage en mode polling');
-              // Fallback: polling périodique
-              const interval = setInterval(loadWalletData, 30000); // 30 secondes
-              return () => clearInterval(interval);
-            }
-          });
-
-        return () => {
-          try {
-            walletSubscription.unsubscribe();
-          } catch (error) {
-            console.warn('Erreur lors de la désinscription:', error);
-          }
-        };
-
-      } catch (error) {
-        console.warn('Erreur lors de la configuration des subscriptions:', error);
-        // Fallback: polling périodique en cas d'erreur WebSocket
-        const interval = setInterval(loadWalletData, 30000);
-        return () => clearInterval(interval);
+    // Polling plus fréquent quand la page est visible
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadWalletData();
       }
     };
 
-    const cleanup = setupSubscriptions();
-    return cleanup;
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Nettoyage
+    return () => {
+      clearInterval(pollingInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [user, loadWalletData]);
 
   return {

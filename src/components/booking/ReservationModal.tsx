@@ -514,7 +514,7 @@ function ReservationModal({
             }
           );
 
-          if (transactionError || !transactionData?.success) {
+          if (transactionError || !transactionData?.success) {   
             await supabase.from('bookings').delete().eq('id', booking.id);
             throw new Error("Erreur lors de la déduction du portefeuille");
           }
