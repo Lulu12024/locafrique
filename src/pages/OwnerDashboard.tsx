@@ -1,4 +1,3 @@
-
 // src/pages/OwnerDashboard.tsx - Page pour les propriétaires
 
 import React, { useState, useEffect } from 'react';
@@ -46,6 +45,7 @@ export function OwnerDashboard() {
 
     setIsLoading(true);
     try {
+      // ✅ REQUÊTE CORRIGÉE - Suppression du champ 'email' inexistant
       const { data, error } = await supabase
         .from('bookings')
         .select(`
@@ -59,7 +59,6 @@ export function OwnerDashboard() {
             id,
             first_name,
             last_name,
-            email,
             avatar_url
           )
         `)

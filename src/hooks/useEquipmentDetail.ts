@@ -14,19 +14,33 @@ export function useEquipmentDetail() {
     try {
       setIsLoading(true);
       
-      console.log("🔍 Récupération de l'équipement:", id);
+      console.log("🔍 Récupération de l'équipement avec images:", id);
       
-      // Validate UUID format to prevent database errors
+      // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!id || !uuidRegex.test(id)) {
         console.error("⚠️ Format UUID invalide:", id);
         return { equipment: null, owner: null };
       }
       
-      // ✅ ÉTAPE 1: Récupérer l'équipement de base
+      // ✅ NOUVELLE REQUÊTE: Récupérer l'équipement avec images ET propriétaire en une seule requête
       const { data: equipmentData, error: equipmentError } = await supabase
         .from('equipments')
-        .select('*')
+        .select(`
+          *,
+          images:equipment_images (*),
+          owner:profiles!equipments_owner_id_fkey (
+            id,
+            first_name,
+            last_name,
+            avatar_url,
+            city,
+            country,
+            phone_number,
+            created_at,
+            user_type
+          )
+        `)
         .eq('id', id)
         .maybeSingle();
       
@@ -40,73 +54,56 @@ export function useEquipmentDetail() {
         return { equipment: null, owner: null };
       }
 
-      // ✅ ÉTAPE 2: Récupérer les images de l'équipement
-      const { data: images, error: imagesError } = await supabase
-        .from('equipment_images')
-        .select('*')
-        .eq('equipment_id', id);
-
-      if (imagesError) {
-        console.error("❌ Erreur images:", imagesError);
-        // Ne pas faire échouer, continuer sans images
-      }
-
-      // ✅ ÉTAPE 3: Récupérer le propriétaire
-      const { data: ownerData, error: ownerError } = await supabase
-        .from('profiles')
-        .select(`
-          id,
-          first_name,
-          last_name,
-          avatar_url,
-          city,
-          country,
-          phone_number,
-          created_at,
-          user_type
-        `)
-        .eq('id', equipmentData.owner_id)
-        .maybeSingle();
-
-      if (ownerError) {
-        console.error("❌ Erreur propriétaire:", ownerError);
-        // Ne pas faire échouer, continuer sans propriétaire
-      }
+      console.log("✅ Données brutes récupérées:", equipmentData);
+      console.log("📸 Images récupérées:", equipmentData.images);
+      console.log("👤 Propriétaire récupéré:", equipmentData.owner);
       
-      console.log("✅ Équipement récupéré:", equipmentData.title);
+      // ✅ TRANSFORMATION: S'assurer que les images sont un tableau
+      const images = Array.isArray(equipmentData.images) ? equipmentData.images : [];
+      console.log("📷 Images transformées:", images);
       
-      // ✅ ÉTAPE 4: Transformer les données
+      // Log de debug pour chaque image
+      images.forEach((img, index) => {
+        console.log(`📷 Image ${index + 1}:`, {
+          id: img.id,
+          url: img.image_url,
+          is_primary: img.is_primary,
+          equipment_id: img.equipment_id
+        });
+      });
+      
+      // ✅ CONSTRUCTION: Créer l'objet EquipmentData avec toutes les données
       const transformedEquipment: EquipmentData = {
         ...equipmentData,
-        images: Array.isArray(images) ? images : [],
-        owner: ownerData ? {
-          ...ownerData,
-          user_type: ownerData.user_type || 'proprietaire'
+        images: images,
+        owner: equipmentData.owner ? {
+          ...equipmentData.owner,
+          user_type: equipmentData.owner.user_type || 'proprietaire'
         } as ProfileData : undefined
       };
       
-      const owner = ownerData ? {
-        ...ownerData,
-        user_type: ownerData.user_type || 'proprietaire'
+      const owner = equipmentData.owner ? {
+        ...equipmentData.owner,
+        user_type: equipmentData.owner.user_type || 'proprietaire'
       } as ProfileData : null;
       
-      return { 
-        equipment: transformedEquipment, 
-        owner: owner
-      };
+      console.log("✅ Équipement transformé final:", transformedEquipment);
+      // console.log("📊 Nombre d'images dans l'équipement final:", transformedEquipment.images?.length || 0);
+      
+      setIsLoading(false);
+      return { equipment: transformedEquipment, owner };
       
     } catch (error: any) {
-      console.error("❌ Erreur dans fetchEquipmentById:", error);
+      console.error("❌ Erreur lors de la récupération de l'équipement:", error);
+      setIsLoading(false);
       
       toast({
         title: "Erreur de chargement",
-        description: "Impossible de charger les détails de l'équipement. Veuillez réessayer.",
+        description: "Impossible de charger les détails de l'équipement.",
         variant: "destructive",
       });
       
       return { equipment: null, owner: null };
-    } finally {
-      setIsLoading(false);
     }
   };
 

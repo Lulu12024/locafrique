@@ -29,6 +29,7 @@ import MyHistory from "./pages/MyHistory";
 import MySettings from "./pages/MySettings";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import WalletRechargeSuccess from '@/pages/WalletRechargeSuccess';
+import { OwnerDashboard } from "./pages/OwnerDashboard";
 
 function App() {
   return (
@@ -64,6 +65,10 @@ function App() {
             <Route path="/my-settings" element={<MySettings />} />
             <Route path="/favorites" element={<Favorites />} />
             <Route path="/activity" element={<Activity />} />
+
+            <Route path="/owner-dashboard" element={<OwnerDashboard />} />
+            <Route path="/received-bookings" element={<OwnerDashboard />} />
+            
           </Route>
         </Routes>
         </div>

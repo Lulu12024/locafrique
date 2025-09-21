@@ -1,21 +1,22 @@
-
-import React from "react";
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/auth";
-import { useUserRoles } from "@/hooks/auth/useUserRoles";
-import { X, LogOut, Crown } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  BarChart3,
-  Truck,
-  Plus,
-  ClipboardCheck,
-  ShoppingCart,
-  FileText,
-  Wallet,
-  History,
+import React from 'react';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { 
+  X, 
+  LogOut, 
+  BarChart3, 
+  Truck, 
+  Plus, 
+  ClipboardCheck, 
+  ShoppingCart, 
+  FileText, 
+  Wallet, 
+  History, 
   Settings,
-} from "lucide-react";
+  Crown 
+} from 'lucide-react';
+import { useAuth } from '@/hooks/auth';
+import { useUserRoles } from '@/hooks/auth/useUserRoles';
 
 interface MobileSidebarProps {
   isOpen: boolean;
@@ -24,31 +25,34 @@ interface MobileSidebarProps {
   setActiveTab: (tab: string) => void;
 }
 
-const MobileSidebar: React.FC<MobileSidebarProps> = ({ 
-  isOpen, 
-  onClose, 
-  activeTab, 
-  setActiveTab 
+const MobileSidebar: React.FC<MobileSidebarProps> = ({
+  isOpen,
+  onClose,
+  activeTab,
+  setActiveTab
 }) => {
-  const { profile, user, signOut } = useAuth();
+  const { profile, signOut } = useAuth();
   const { isProprietaire } = useUserRoles(profile);
 
   const getInitials = () => {
-    if (profile?.first_name && profile?.last_name) {
-      return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase();
-    }
-    return user?.email?.[0]?.toUpperCase() || "U";
+    const firstName = profile?.first_name || "";
+    const lastName = profile?.last_name || "";
+    return firstName.charAt(0).toUpperCase() + lastName.charAt(0).toUpperCase() || profile?.address?.[0]?.toUpperCase() || "U";
   };
 
+  // MENU UNIVERSEL - Accessible à tous les utilisateurs
   const menuItems = [
     { id: "stats", label: "Vue d'ensemble", icon: BarChart3, show: true },
-    ...(isProprietaire ? [
-      { id: "equipment", label: "Mes équipements", icon: Truck, show: true },
-      { id: "add-equipment", label: "Ajouter équipement", icon: Plus, show: true },
-      { id: "bookings", label: "Réservations", icon: ClipboardCheck, show: true },
-    ] : [
-      { id: "rentals", label: "Mes locations", icon: ShoppingCart, show: true },
-    ]),
+    
+    // SECTION ÉQUIPEMENTS - Maintenant pour tous
+    { id: "equipment", label: "Mes équipements", icon: Truck, show: true },
+    { id: "add-equipment", label: "Ajouter équipement", icon: Plus, show: true },
+    { id: "bookings", label: "Demandes reçues", icon: ClipboardCheck, show: true },
+    
+    // SECTION LOCATIONS - Maintenant pour tous  
+    { id: "rentals", label: "Mes locations", icon: ShoppingCart, show: true },
+    
+    // MENUS COMMUNS
     { id: "contracts", label: "Contrats", icon: FileText, show: true },
     { id: "wallet", label: "Portefeuille", icon: Wallet, show: true },
     { id: "history", label: "Historique", icon: History, show: true },

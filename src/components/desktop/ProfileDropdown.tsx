@@ -1,25 +1,34 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { User, Settings, LogOut, LayoutDashboard, Package, Plus, Calendar, FileText, Wallet, History } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useAuth } from '@/hooks/auth';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import AddEquipmentModal from '@/components/AddEquipmentModal';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { 
+  LayoutDashboard, 
+  Package, 
+  Plus, 
+  Calendar, 
+  FileText, 
+  Wallet, 
+  History, 
+  Settings,
+  LogOut,
+  ClipboardCheck
+} from 'lucide-react';
+import { useAuth } from '@/hooks/auth';
+import AddEquipmentModal from "@/components/AddEquipmentModal";
 
-const DesktopProfileDropdown: React.FC = () => {
+function ProfileDropdown() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [showAddEquipmentModal, setShowAddEquipmentModal] = useState(false);
-  const { user, profile, signOut } = useAuth();
-  const navigate = useNavigate();
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { t } = useTranslation();
 
   const toggleDropdown = () => setIsOpen(!isOpen);
   const closeDropdown = () => setIsOpen(false);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -27,20 +36,14 @@ const DesktopProfileDropdown: React.FC = () => {
       }
     };
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const getInitials = () => {
-    if (profile?.first_name && profile?.last_name) {
-      return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase();
-    }
-    return user?.email?.[0]?.toUpperCase() || "U";
+    const firstName = profile?.first_name || "";
+    const lastName = profile?.last_name || "";
+    return firstName.charAt(0).toUpperCase() + lastName.charAt(0).toUpperCase() || user?.email?.[0]?.toUpperCase() || "U";
   };
 
   const handleNavigation = (path: string) => {
@@ -61,12 +64,15 @@ const DesktopProfileDropdown: React.FC = () => {
 
   if (!user) return null;
 
+  // MENU UNIVERSEL - Accessible à tous les utilisateurs
   const menuItems = [
     {
       icon: LayoutDashboard,
       label: 'Vue d\'ensemble',
       onClick: () => handleNavigation('/overview')
     },
+    
+    // SECTION ÉQUIPEMENTS - Maintenant pour tous
     {
       icon: Package,
       label: 'Mes annonces',
@@ -78,10 +84,19 @@ const DesktopProfileDropdown: React.FC = () => {
       onClick: handleAddEquipment
     },
     {
+      icon: ClipboardCheck,
+      label: 'Demandes reçues',
+      onClick: () => handleNavigation('/received-bookings')
+    },
+    
+    // SECTION LOCATIONS - Maintenant pour tous
+    {
       icon: Calendar,
       label: 'Mes locations',
       onClick: () => handleNavigation('/my-bookings')
     },
+    
+    // MENUS COMMUNS
     {
       icon: FileText,
       label: 'Contrats',
@@ -139,7 +154,10 @@ const DesktopProfileDropdown: React.FC = () => {
                     {profile?.first_name} {profile?.last_name}
                   </p>
                   <p className="text-xs text-gray-500 truncate">
-                    {user.email}
+                    {user?.email}
+                  </p>
+                  <p className="text-xs text-green-600 font-medium">
+                    {profile?.user_type === 'proprietaire' ? 'Propriétaire' : 'Locataire'}
                   </p>
                 </div>
               </div>
@@ -147,29 +165,26 @@ const DesktopProfileDropdown: React.FC = () => {
 
             {/* Menu Items */}
             <div className="py-2">
-              {menuItems.map((item, index) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={index}
-                    onClick={item.onClick}
-                    className="w-full flex items-center space-x-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
+              {menuItems.map((item, index) => (
+                <button
+                  key={index}
+                  onClick={item.onClick}
+                  className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <item.icon className="h-4 w-4 mr-3 text-gray-500" />
+                  {item.label}
+                </button>
+              ))}
             </div>
 
-            {/* Sign Out - Bien visible en bas */}
+            {/* Sign Out */}
             <div className="border-t border-gray-100 py-2">
               <button
                 onClick={handleSignOut}
-                className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors font-medium"
+                className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
               >
-                <LogOut className="h-4 w-4" />
-                <span>Se déconnecter</span>
+                <LogOut className="h-4 w-4 mr-3" />
+                Se déconnecter
               </button>
             </div>
           </div>
@@ -177,12 +192,14 @@ const DesktopProfileDropdown: React.FC = () => {
       </div>
 
       {/* Add Equipment Modal */}
-      <AddEquipmentModal 
-        isOpen={showAddEquipmentModal}
-        onClose={() => setShowAddEquipmentModal(false)}
-      />
+      {showAddEquipmentModal && (
+        <AddEquipmentModal 
+          isOpen={showAddEquipmentModal}
+          onClose={() => setShowAddEquipmentModal(false)}
+        />
+      )}
     </>
   );
-};
+}
 
-export default DesktopProfileDropdown;
+export default ProfileDropdown;

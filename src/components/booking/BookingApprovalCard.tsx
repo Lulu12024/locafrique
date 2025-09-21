@@ -15,7 +15,7 @@ import {
   Phone, 
   MapPin,
   Calendar,
-  Euro,
+  DollarSign,
   FileText,
   Mail,
   Download,
@@ -339,7 +339,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
             <h5 className="font-medium text-sm text-gray-700 mb-2">Montant</h5>
             <div className="space-y-1">
               <p className="flex items-center text-sm font-medium">
-                <Euro className="h-3 w-3 mr-1" />
+                {/* <DollarSign className="h-3 w-3 mr-1" /> */}
                 {booking.total_price?.toLocaleString()} FCFA
               </p>
               <p className="text-xs text-gray-500">
