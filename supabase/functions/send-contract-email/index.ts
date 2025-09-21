@@ -27,26 +27,61 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
+    // ✅ PARSING ROBUSTE DU JSON
+    let requestBody;
+    try {
+      requestBody = await req.json();
+      logStep("Request body parsed successfully", requestBody);
+    } catch (parseError) {
+      logStep("JSON parsing failed", { error: parseError.message });
+      throw new Error(`Impossible de parser le JSON: ${parseError.message}`);
+    }
+
     const { 
       booking_id, 
       contract_url, 
       renter_email, 
       owner_email, 
       equipment_title 
-    } = await req.json();
+    } = requestBody;
 
-    if (!booking_id || !contract_url || !renter_email || !owner_email) {
-      throw new Error("Données manquantes pour l'envoi d'email");
-    }
-
-    logStep("Email data received", { 
-      booking_id, 
-      renter_email, 
-      owner_email, 
-      equipment_title 
+    // ✅ VALIDATION DÉTAILLÉE DES PARAMÈTRES
+    logStep("Validating parameters", {
+      booking_id: !!booking_id,
+      contract_url: !!contract_url,
+      renter_email: !!renter_email,
+      owner_email: !!owner_email,
+      equipment_title: !!equipment_title,
+      raw_data: { booking_id, contract_url, renter_email, owner_email, equipment_title }
     });
 
-    // Récupérer les détails complets de la réservation
+    const missingParams = [];
+    if (!booking_id || booking_id === 'undefined' || booking_id === 'null') {
+      missingParams.push('booking_id');
+    }
+    if (!contract_url || contract_url === 'undefined' || contract_url === 'null') {
+      missingParams.push('contract_url');
+    }
+    if (!renter_email || renter_email === 'undefined' || renter_email === 'null') {
+      missingParams.push('renter_email');
+    }
+    if (!owner_email || owner_email === 'undefined' || owner_email === 'null') {
+      missingParams.push('owner_email');
+    }
+
+    if (missingParams.length > 0) {
+      const errorMsg = `Paramètres manquants ou invalides: ${missingParams.join(', ')}`;
+      logStep("Validation failed", { 
+        missingParams, 
+        receivedData: requestBody 
+      });
+      throw new Error(errorMsg);
+    }
+
+    logStep("All parameters validated successfully");
+
+    // ✅ RÉCUPÉRATION DES DÉTAILS DE LA RÉSERVATION
+    logStep("Fetching booking details");
     const { data: booking, error: bookingError } = await supabaseService
       .from('bookings')
       .select(`
@@ -56,43 +91,45 @@ serve(async (req) => {
           title,
           description,
           daily_price,
-          deposit_amount
+          deposit_amount,
+          owner:profiles!equipments_owner_id_fkey(
+            id,
+            first_name,
+            last_name
+          )
         ),
         renter:profiles!bookings_renter_id_fkey(
           id,
           first_name,
-          last_name,
-          email
-        ),
-        owner:profiles!bookings_owner_id_fkey(
-          id,
-          first_name,
-          last_name,
-          email
+          last_name
         )
       `)
       .eq('id', booking_id)
       .single();
 
     if (bookingError || !booking) {
-      throw new Error("Réservation non trouvée");
+      logStep("Booking fetch failed", { error: bookingError });
+      throw new Error(`Réservation non trouvée: ${bookingError?.message || 'Booking not found'}`);
     }
 
     logStep("Booking details retrieved", { 
       equipmentTitle: booking.equipment?.title,
       renterName: `${booking.renter?.first_name} ${booking.renter?.last_name}`,
-      ownerName: `${booking.owner?.first_name} ${booking.owner?.last_name}`
+      ownerName: `${booking.equipment?.owner?.first_name} ${booking.equipment?.owner?.last_name}`
     });
 
-    // Configuration email (Resend, SendGrid, ou autre service d'email)
-    const emailApiKey = Deno.env.get("RESEND_API_KEY") || Deno.env.get("SENDGRID_API_KEY");
-    const emailService = Deno.env.get("EMAIL_SERVICE") || "resend"; // ou "sendgrid"
+    // ⚠️ ATTENTION: Clé API en dur - À CHANGER avant la production !
+    const emailApiKey = "VOTRE_CLE_RESEND_ICI"; // Remplacez par votre vraie clé
+    const emailService = "resend";
     
-    if (!emailApiKey) {
-      throw new Error("Clé API email non configurée");
+    if (!emailApiKey || emailApiKey === "VOTRE_CLE_RESEND_ICI") {
+      logStep("Email API key missing or not configured");
+      throw new Error("Veuillez remplacer VOTRE_CLE_RESEND_ICI par votre vraie clé Resend");
     }
 
-    // Générer le contenu des emails
+    logStep("Email service configured", { service: emailService });
+
+    // ✅ GÉNÉRATION DU CONTENU EMAIL
     const formatDate = (dateString: string) => {
       return new Date(dateString).toLocaleDateString('fr-FR', {
         weekday: 'long',
@@ -103,11 +140,11 @@ serve(async (req) => {
     };
 
     const generateEmailContent = (isForRenter: boolean) => {
-      const recipient = isForRenter ? booking.renter : booking.owner;
+      const recipient = isForRenter ? booking.renter : booking.equipment?.owner;
       const role = isForRenter ? 'locataire' : 'propriétaire';
       
       return {
-        subject: `🏠 Contrat de location - ${booking.equipment?.title}`,
+        subject: `🏠 Contrat de location - ${equipment_title}`,
         html: `
           <!DOCTYPE html>
           <html>
@@ -115,199 +152,128 @@ serve(async (req) => {
             <meta charset="utf-8">
             <title>Contrat de location</title>
             <style>
-              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; }
               .header { background: linear-gradient(135deg, #10b981, #3b82f6); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
               .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
               .card { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
               .button { display: inline-block; background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; }
-              .details { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-              .detail-item { padding: 10px; background: #f3f4f6; border-radius: 6px; }
               .highlight { color: #10b981; font-weight: bold; }
-              .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 6px; margin: 15px 0; }
             </style>
           </head>
           <body>
-            <div class="container">
-              <div class="header">
-                <h1>🏠 Contrat de location généré</h1>
-                <p>Félicitations ! Votre contrat de location est prêt</p>
+            <div class="header">
+              <h1>🏠 Contrat de location généré</h1>
+              <p>Félicitations ! Votre contrat est prêt</p>
+            </div>
+            <div class="content">
+              <div class="card">
+                <h2>Bonjour ${recipient?.first_name} ${recipient?.last_name},</h2>
+                <p>Votre contrat de location en tant que <strong>${role}</strong> a été généré automatiquement.</p>
+                
+                <div style="background: #f3f4f6; padding: 15px; border-radius: 6px; margin: 15px 0;">
+                  <h3>📋 Détails de la réservation</h3>
+                  <p><strong>Équipement :</strong> ${equipment_title}</p>
+                  <p><strong>Période :</strong> Du ${formatDate(booking.start_date)} au ${formatDate(booking.end_date)}</p>
+                  <p><strong>Prix total :</strong> ${booking.total_price?.toLocaleString()} FCFA</p>
+                  <p><strong>Caution :</strong> ${booking.deposit_amount?.toLocaleString()} FCFA</p>
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${contract_url}" class="button">📄 Télécharger le contrat</a>
+                </div>
+                
+                <p><strong>Important :</strong> Veuillez lire attentivement le contrat et le conserver précieusement.</p>
               </div>
               
-              <div class="content">
-                <h2>Bonjour ${recipient?.first_name} ${recipient?.last_name},</h2>
-                
-                <p>Nous avons le plaisir de vous informer que le contrat de location pour <strong>"${booking.equipment?.title}"</strong> a été généré automatiquement et est maintenant disponible.</p>
-                
-                <div class="card">
-                  <h3>📋 Détails de la réservation</h3>
-                  <div class="details">
-                    <div class="detail-item">
-                      <strong>Équipement :</strong><br>
-                      ${booking.equipment?.title}
-                    </div>
-                    <div class="detail-item">
-                      <strong>Période :</strong><br>
-                      Du ${formatDate(booking.start_date)}<br>
-                      Au ${formatDate(booking.end_date)}
-                    </div>
-                    <div class="detail-item">
-                      <strong>Prix total :</strong><br>
-                      <span class="highlight">${booking.total_price?.toLocaleString()} FCFA</span>
-                    </div>
-                    <div class="detail-item">
-                      <strong>Caution :</strong><br>
-                      ${booking.deposit_amount?.toLocaleString()} FCFA
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="card">
-                  <h3>📄 Votre contrat</h3>
-                  <p>Le contrat de location a été pré-rempli avec toutes les informations nécessaires et validé automatiquement avec vos pièces d'identité.</p>
-                  
-                  <div style="text-align: center; margin: 20px 0;">
-                    <a href="${contract_url}" class="button">
-                      📥 Télécharger le contrat PDF
-                    </a>
-                  </div>
-                  
-                  <div class="warning">
-                    <strong>⚠️ Important :</strong> Veuillez télécharger et conserver ce contrat. Il contient toutes les conditions de location et les informations légales nécessaires.
-                  </div>
-                </div>
-                
-                ${isForRenter ? `
-                <div class="card">
-                  <h3>🎯 Prochaines étapes</h3>
-                  <ul>
-                    <li>✅ Téléchargez et lisez attentivement votre contrat</li>
-                    <li>📅 Respectez les dates de location convenues</li>
-                    <li>📞 Contactez le propriétaire pour organiser la remise de l'équipement</li>
-                    <li>💰 Le paiement a été traité selon la méthode choisie</li>
-                  </ul>
-                </div>
-                ` : `
-                <div class="card">
-                  <h3>🎯 En tant que propriétaire</h3>
-                  <ul>
-                    <li>✅ La réservation a été confirmée automatiquement</li>
-                    <li>📅 Préparez votre équipement pour les dates convenues</li>
-                    <li>📞 Le locataire vous contactera pour organiser la remise</li>
-                    <li>💰 Le paiement sera traité selon nos conditions</li>
-                  </ul>
-                </div>
-                `}
-                
-                <div class="card">
-                  <h3>📞 Besoin d'aide ?</h3>
-                  <p>Si vous avez des questions concernant ce contrat ou votre réservation, n'hésitez pas à nous contacter :</p>
-                  <ul>
-                    <li>📧 Email : support@votre-plateforme.com</li>
-                    <li>📱 Téléphone : +229 XX XX XX XX</li>
-                    <li>💬 Chat en ligne sur notre site web</li>
-                  </ul>
-                </div>
-                
-                <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-                  <p style="color: #6b7280; font-size: 14px;">
-                    Cet email a été envoyé automatiquement par notre système.<br>
-                    © 2025 Votre Plateforme de Location - Tous droits réservés
-                  </p>
-                </div>
+              <div style="text-align: center; color: #6b7280; font-size: 14px; margin-top: 30px;">
+                <p>© 2025 3W-LOC - Plateforme de location de matériel</p>
               </div>
             </div>
           </body>
           </html>
         `,
         text: `
-          Contrat de location - ${booking.equipment?.title}
+          Contrat de location - ${equipment_title}
           
           Bonjour ${recipient?.first_name} ${recipient?.last_name},
           
-          Le contrat de location pour "${booking.equipment?.title}" a été généré automatiquement.
+          Votre contrat de location a été généré automatiquement.
           
-          Détails de la réservation :
-          - Équipement : ${booking.equipment?.title}
+          Détails :
+          - Équipement : ${equipment_title}
           - Période : Du ${formatDate(booking.start_date)} au ${formatDate(booking.end_date)}
           - Prix total : ${booking.total_price?.toLocaleString()} FCFA
           - Caution : ${booking.deposit_amount?.toLocaleString()} FCFA
           
           Téléchargez votre contrat : ${contract_url}
           
-          Pour toute question, contactez-nous à support@votre-plateforme.com
-          
           Cordialement,
-          L'équipe Votre Plateforme de Location
+          L'équipe 3W-LOC
         `
       };
     };
 
-    // Préparer les emails pour les deux parties
+    // ✅ PRÉPARATION DES EMAILS
     const renterEmail = generateEmailContent(true);
     const ownerEmail = generateEmailContent(false);
 
     let emailsSent = 0;
-    const errors = [];
+    const errors: string[] = [];
 
-    // Fonction d'envoi selon le service
+    // ✅ FONCTION D'ENVOI EMAIL VIA GMAIL SMTP
     const sendEmail = async (to: string, emailContent: any) => {
-      if (emailService === "resend") {
-        // RESEND
-        const response = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${emailApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            from: "Contrats <contrats@votre-plateforme.com>",
-            to: [to],
-            subject: emailContent.subject,
-            html: emailContent.html,
-            text: emailContent.text,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Erreur Resend: ${errorText}`);
+      logStep("Sending email via Gmail SMTP", { to });
+      
+      // Configuration Gmail SMTP
+      const smtpConfig = {
+        host: "smtp.gmail.com",
+        port: 587,
+        secure: false, // true pour 465, false pour autres ports
+        auth: {
+          user: "deogratiasluc84@gmail.com", // Votre email Gmail
+          pass: "VOTRE_MOT_DE_PASSE_APPLICATION_ICI" // Mot de passe d'application 16 caractères
         }
+      };
 
-        return await response.json();
+      // Utilisation de l'API SMTP via fetch (simulation)
+      // Note: Dans un vrai environnement Deno, vous utiliseriez une lib SMTP
+      const emailData = {
+        from: `"3W-LOC" <${smtpConfig.auth.user}>`,
+        to: to,
+        subject: emailContent.subject,
+        html: emailContent.html,
+        text: emailContent.text
+      };
 
-      } else if (emailService === "sendgrid") {
-        // SENDGRID
-        const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${emailApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            personalizations: [{ to: [{ email: to }] }],
-            from: { email: "contrats@votre-plateforme.com", name: "Contrats Location" },
-            subject: emailContent.subject,
-            content: [
-              { type: "text/html", value: emailContent.html },
-              { type: "text/plain", value: emailContent.text }
-            ],
-          }),
-        });
+      // Pour Deno/Edge Functions, on utilise une API SMTP service
+      // Exemple avec smtp2go ou emailjs comme proxy SMTP
+      const response = await fetch("https://api.smtp2go.com/v3/email/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Smtp2go-Api-Key": "VOTRE_CLE_SMTP2GO" // Service intermédiaire
+        },
+        body: JSON.stringify({
+          sender: smtpConfig.auth.user,
+          to: [to],
+          subject: emailContent.subject,
+          html_body: emailContent.html,
+          text_body: emailContent.text
+        })
+      });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Erreur SendGrid: ${errorText}`);
-        }
-
-        return { success: true };
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erreur SMTP: ${errorText}`);
       }
+
+      return await response.json();
     };
 
-    // Envoyer l'email au locataire
+    // ✅ ENVOI AU LOCATAIRE (temporairement vers votre email pour test)
     try {
-      logStep("Sending email to renter", { email: renter_email });
-      await sendEmail(renter_email, renterEmail);
+      logStep("Sending email to renter", { email: "deogratiasluc84@gmail.com" });
+      await sendEmail("deogratiasluc84@gmail.com", renterEmail); // Test avec votre email
       emailsSent++;
       logStep("Email sent to renter successfully");
     } catch (error) {
@@ -315,10 +281,10 @@ serve(async (req) => {
       errors.push(`Locataire: ${error.message}`);
     }
 
-    // Envoyer l'email au propriétaire
+    // ✅ ENVOI AU PROPRIÉTAIRE (temporairement vers votre email pour test)
     try {
-      logStep("Sending email to owner", { email: owner_email });
-      await sendEmail(owner_email, ownerEmail);
+      logStep("Sending email to owner", { email: "deogratiasluc84@gmail.com" });
+      await sendEmail("deogratiasluc84@gmail.com", ownerEmail); // Test avec votre email
       emailsSent++;
       logStep("Email sent to owner successfully");
     } catch (error) {
@@ -326,7 +292,7 @@ serve(async (req) => {
       errors.push(`Propriétaire: ${error.message}`);
     }
 
-    // Enregistrer l'activité d'envoi d'email
+    // ✅ ENREGISTREMENT DES LOGS
     await supabaseService.from('email_logs').insert({
       booking_id: booking_id,
       email_type: 'contract_delivery',
@@ -353,7 +319,10 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in contract email sending", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ 
+      success: false,
+      error: errorMessage 
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

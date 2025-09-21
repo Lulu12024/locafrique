@@ -119,16 +119,16 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
       }
 
       // 4. Envoyer le contrat par email automatiquement
-      if (contractUrl) {
-        console.log('📧 Envoi automatique du contrat par email...');
+      if (contractData.details?.renter_email && contractData.details?.owner_email) {
+        console.log('📧 Envoi du contrat par email...');
         
         const { error: emailError } = await supabase.functions.invoke('send-contract-email', {
           body: {
             booking_id: booking.id,
             contract_url: contractUrl,
-            renter_email: booking.renter?.email,
-            owner_email: booking.equipment?.owner?.email,
-            equipment_title: booking.equipment?.title
+            renter_email: contractData.details.renter_email,
+            owner_email: contractData.details.owner_email,
+            equipment_title: contractData.details.equipment_title
           }
         });
 
@@ -143,7 +143,15 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
           console.log('✅ Emails envoyés avec succès');
         }
       }
-
+      else {
+        console.error('❌ Emails manquants dans la réponse de generate-contract');
+        toast({
+          title: "Email non envoyé",
+          description: "Contrat généré mais impossible de récupérer les emails.",
+          variant: "destructive"
+        });
+      }
+      console.log('📄 Génération automatique du contrat...');
       // 5. Créer les notifications
       const notifications = [
         // Notification pour le propriétaire

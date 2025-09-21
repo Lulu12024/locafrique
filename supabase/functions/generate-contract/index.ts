@@ -33,16 +33,41 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     )
 
-    // ✅ ÉTAPE 1: Récupérer la réservation
+    // ✅ ÉTAPE 1: Récupérer les données de réservation avec profiles (sans email)
     console.log("🔍 Récupération des données de réservation...");
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
-      .select('*')
+      .select(`
+        *,
+        equipment:equipments!bookings_equipment_id_fkey(
+          *,
+          owner:profiles!equipments_owner_id_fkey(
+            id,
+            first_name,
+            last_name,
+            phone_number,
+            address,
+            city,
+            country,
+            id_number
+          )
+        ),
+        renter:profiles!bookings_renter_id_fkey(
+          id,
+          first_name,
+          last_name,
+          phone_number,
+          address,
+          city,
+          country,
+          id_number
+        )
+      `)
       .eq('id', booking_id)
       .single()
 
     if (bookingError) {
-      console.error("❌ Erreur récupération réservation:", bookingError);
+      console.error("❌ Erreur récupération données:", bookingError);
       throw bookingError;
     }
     if (!booking) {
@@ -50,52 +75,15 @@ serve(async (req) => {
       throw new Error('Booking not found');
     }
 
-    console.log("✅ Réservation trouvée:", booking.id);
+    console.log("✅ Données récupérées:", {
+      bookingId: booking.id,
+      equipmentTitle: booking.equipment?.title,
+      renterName: `${booking.renter?.first_name} ${booking.renter?.last_name}`,
+      ownerName: `${booking.equipment?.owner?.first_name} ${booking.equipment?.owner?.last_name}`
+    });
 
-    // ✅ ÉTAPE 2: Récupérer l'équipement
-    const { data: equipment, error: equipmentError } = await supabaseAdmin
-      .from('equipments')
-      .select('*')
-      .eq('id', booking.equipment_id)
-      .single()
-
-    if (equipmentError) {
-      console.error("❌ Erreur récupération équipement:", equipmentError);
-      throw equipmentError;
-    }
-
-    console.log("🏠 Équipement:", equipment?.title);
-
-    // ✅ ÉTAPE 3: Récupérer le locataire
-    const { data: renter, error: renterError } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', booking.renter_id)
-      .single()
-
-    if (renterError) {
-      console.error("❌ Erreur récupération locataire:", renterError);
-      throw renterError;
-    }
-
-    console.log("👤 Locataire:", renter?.first_name, renter?.last_name);
-
-    // ✅ ÉTAPE 4: Récupérer le propriétaire
-    const { data: owner, error: ownerError } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', equipment.owner_id)
-      .single()
-
-    if (ownerError) {
-      console.error("❌ Erreur récupération propriétaire:", ownerError);
-      throw ownerError;
-    }
-
-    console.log("✅ Propriétaire trouvé:", owner?.first_name, owner?.last_name);
-
-    // ✅ ÉTAPE 5: Récupérer les emails depuis auth.users
-    console.log("📧 Récupération des emails...");
+    // ✅ ÉTAPE 2: Récupérer les emails depuis auth.users
+    console.log("📧 Récupération des emails depuis auth.users...");
     
     // Email du locataire
     const { data: renterUser, error: renterUserError } = await supabaseAdmin.auth.admin.getUserById(booking.renter_id)
@@ -103,21 +91,21 @@ serve(async (req) => {
     
     if (renterUserError || !renterEmail) {
       console.error("❌ Erreur récupération email locataire:", renterUserError);
-      throw new Error('Renter email not found');
+      throw new Error(`Renter email not found: ${renterUserError?.message || 'No email returned'}`);
     }
 
     // Email du propriétaire  
-    const { data: ownerUser, error: ownerUserError } = await supabaseAdmin.auth.admin.getUserById(equipment.owner_id)
+    const { data: ownerUser, error: ownerUserError } = await supabaseAdmin.auth.admin.getUserById(booking.equipment.owner_id)
     const ownerEmail = ownerUser?.user?.email
     
     if (ownerUserError || !ownerEmail) {
       console.error("❌ Erreur récupération email propriétaire:", ownerUserError);
-      throw new Error('Owner email not found');
+      throw new Error(`Owner email not found: ${ownerUserError?.message || 'No email returned'}`);
     }
 
-    console.log("✅ Emails récupérés:", { renterEmail, ownerEmail });
+    console.log("✅ Emails récupérés depuis auth.users:", { renterEmail, ownerEmail });
 
-    // ✅ ÉTAPE 6: Génération du PDF
+    // ✅ ÉTAPE 3: Génération du PDF
     console.log("📄 Génération du PDF...");
     const doc = new jsPDF()
     
@@ -141,6 +129,7 @@ serve(async (req) => {
     doc.text('PARTIES AU CONTRAT', 20, 50)
     
     // Owner information
+    const owner = booking.equipment?.owner;
     doc.setFontSize(12)
     doc.setFont('helvetica', 'bold')
     doc.text('PROPRIÉTAIRE (Bailleur)', 20, 60)
@@ -155,6 +144,7 @@ serve(async (req) => {
     }
     
     // Renter information
+    const renter = booking.renter;
     doc.setFontSize(12)
     doc.setFont('helvetica', 'bold')
     doc.text('LOCATAIRE (Preneur)', 20, 110)
@@ -169,6 +159,7 @@ serve(async (req) => {
     }
     
     // Equipment information
+    const equipment = booking.equipment;
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
     doc.text('OBJET DE LA LOCATION', 20, 160)
@@ -226,7 +217,7 @@ serve(async (req) => {
     
     console.log("✅ PDF généré avec succès");
 
-    // ✅ ÉTAPE 7: Upload du PDF
+    // ✅ ÉTAPE 4: Upload du PDF
     const fileName = `contract-${booking_id}-${Date.now()}.pdf`
     const contractPath = `contracts/${fileName}`
     const base64Data = pdfOutput.split(',')[1]
@@ -252,7 +243,7 @@ serve(async (req) => {
 
     console.log("✅ Contrat uploadé:", contractUrl);
 
-    // ✅ ÉTAPE 8: Mise à jour de la réservation
+    // ✅ ÉTAPE 5: Mise à jour de la réservation
     const { error: updateError } = await supabaseAdmin
       .from('bookings')
       .update({ contract_url: contractUrl })
@@ -262,39 +253,14 @@ serve(async (req) => {
       console.error("❌ Erreur mise à jour booking:", updateError);
     }
 
-    // ✅ ÉTAPE 9: Envoi automatique de l'email
-    console.log("📧 Envoi automatique du contrat par email...");
-    
-    try {
-      const { data: emailData, error: emailError } = await supabaseAdmin.functions.invoke('send-contract-email', {
-        body: {
-          booking_id: booking_id,
-          contract_url: contractUrl,
-          renter_email: renterEmail,
-          owner_email: ownerEmail,
-          equipment_title: equipment?.title || 'Équipement'
-        }
-      });
-
-      if (emailError) {
-        console.error("❌ Erreur envoi email:", emailError);
-        // Ne pas faire échouer toute la fonction pour un problème d'email
-      } else {
-        console.log("✅ Emails envoyés avec succès:", emailData);
-      }
-    } catch (emailErr) {
-      console.error("❌ Erreur lors de l'envoi email:", emailErr);
-      // Continue quand même, l'email n'est pas critique
-    }
-
     console.log("🎉 Génération de contrat terminée avec succès!");
 
-    // Return success response
+    // Return success response avec les emails pour permettre l'envoi depuis le client
     return new Response(
       JSON.stringify({
         success: true,
         pdf: contractUrl,
-        message: 'Contract generated and emailed successfully',
+        message: 'Contract generated successfully',
         details: {
           contract_url: contractUrl,
           renter_email: renterEmail,
