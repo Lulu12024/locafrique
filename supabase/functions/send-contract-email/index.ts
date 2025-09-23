@@ -119,13 +119,13 @@ serve(async (req) => {
     });
 
     // ⚠️ ATTENTION: Clé API en dur - À CHANGER avant la production !
-    const emailApiKey = "VOTRE_CLE_RESEND_ICI"; // Remplacez par votre vraie clé
+    const emailApiKey = "re_RJbkvx2N_5bKd4GSVWmrLaTyQTa2aubZo"; // Remplacez par votre vraie clé
     const emailService = "resend";
     
-    if (!emailApiKey || emailApiKey === "VOTRE_CLE_RESEND_ICI") {
-      logStep("Email API key missing or not configured");
-      throw new Error("Veuillez remplacer VOTRE_CLE_RESEND_ICI par votre vraie clé Resend");
-    }
+    // if (!emailApiKey || emailApiKey === "VOTRE_CLE_RESEND_ICI") {
+    //   logStep("Email API key missing or not configured");
+    //   throw new Error("Veuillez remplacer VOTRE_CLE_RESEND_ICI par votre vraie clé Resend");
+    // }
 
     logStep("Email service configured", { service: emailService });
 
@@ -220,54 +220,35 @@ serve(async (req) => {
     let emailsSent = 0;
     const errors: string[] = [];
 
-    // ✅ FONCTION D'ENVOI EMAIL VIA GMAIL SMTP
+    // ✅ FONCTION D'ENVOI EMAIL
     const sendEmail = async (to: string, emailContent: any) => {
-      logStep("Sending email via Gmail SMTP", { to });
+      logStep("Sending email", { to, service: emailService });
       
-      // Configuration Gmail SMTP
-      const smtpConfig = {
-        host: "smtp.gmail.com",
-        port: 587,
-        secure: false, // true pour 465, false pour autres ports
-        auth: {
-          user: "deogratiasluc84@gmail.com", // Votre email Gmail
-          pass: "VOTRE_MOT_DE_PASSE_APPLICATION_ICI" // Mot de passe d'application 16 caractères
+      if (emailService === "resend") {
+        const response = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${emailApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: "onboarding@resend.dev", // Utilisez l'email par défaut de Resend
+            to: [to],
+            subject: emailContent.subject,
+            html: emailContent.html,
+            text: emailContent.text,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Erreur Resend: ${errorText}`);
         }
-      };
 
-      // Utilisation de l'API SMTP via fetch (simulation)
-      // Note: Dans un vrai environnement Deno, vous utiliseriez une lib SMTP
-      const emailData = {
-        from: `"3W-LOC" <${smtpConfig.auth.user}>`,
-        to: to,
-        subject: emailContent.subject,
-        html: emailContent.html,
-        text: emailContent.text
-      };
-
-      // Pour Deno/Edge Functions, on utilise une API SMTP service
-      // Exemple avec smtp2go ou emailjs comme proxy SMTP
-      const response = await fetch("https://api.smtp2go.com/v3/email/send", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Smtp2go-Api-Key": "VOTRE_CLE_SMTP2GO" // Service intermédiaire
-        },
-        body: JSON.stringify({
-          sender: smtpConfig.auth.user,
-          to: [to],
-          subject: emailContent.subject,
-          html_body: emailContent.html,
-          text_body: emailContent.text
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erreur SMTP: ${errorText}`);
+        return await response.json();
+      } else {
+        throw new Error(`Service email ${emailService} non supporté`);
       }
-
-      return await response.json();
     };
 
     // ✅ ENVOI AU LOCATAIRE (temporairement vers votre email pour test)
