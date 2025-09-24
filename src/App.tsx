@@ -1,6 +1,6 @@
 
 import React from "react";
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import { BrowserRouter as Router, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import Navbar from "@/components/Navbar";
 import { NotificationSystem } from "@/components/NotificationSystem";
@@ -31,15 +31,47 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import WalletRechargeSuccess from '@/pages/WalletRechargeSuccess';
 import { OwnerDashboard } from "./pages/OwnerDashboard";
 
+// Composant pour gérer le layout conditionnel
+function AppLayout({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  
+  // Pages qui ne doivent PAS avoir la navigation (navbar + bottom navigation)
+  const detailPages = [
+    '/equipments/details'
+  ];
+  
+  // Vérifier si on est sur une page de détails
+  const isDetailPage = detailPages.some(path => location.pathname.startsWith(path));
+  
+  if (isDetailPage) {
+    // Pour les pages de détails : pas de navigation
+    return (
+      <div className="min-h-screen bg-background font-sans antialiased">
+        <NotificationSystem />
+        <Toaster />
+        {children}
+      </div>
+    );
+  }
+  
+  // Pour les autres pages : navigation normale
+  return (
+    <MobileOptimizedLayout>
+      <div className="min-h-screen bg-background font-sans antialiased">
+        <Navbar />
+        <NotificationSystem />
+        <Toaster />
+        {children}
+      </div>
+    </MobileOptimizedLayout>
+  );
+}
+
 function App() {
   return (
     <Router>
-      <MobileOptimizedLayout>
-        <div className="min-h-screen bg-background font-sans antialiased">
-          <Navbar />
-          <NotificationSystem />
-          <Toaster />
-          <Routes>
+      <AppLayout>
+        <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/search" element={<Search />} />
@@ -53,6 +85,7 @@ function App() {
           <Route path="/payment-success" element={<PaymentSuccess />} />
           <Route path="*" element={<NotFound />} />
           <Route path="/wallet-recharge-success" element={<WalletRechargeSuccess />} />
+          
           {/* Protected Routes */}
           <Route element={<RequireAuth />}>
             <Route path="/overview" element={<Overview />} />
@@ -65,14 +98,11 @@ function App() {
             <Route path="/my-settings" element={<MySettings />} />
             <Route path="/favorites" element={<Favorites />} />
             <Route path="/activity" element={<Activity />} />
-
             <Route path="/owner-dashboard" element={<OwnerDashboard />} />
             <Route path="/received-bookings" element={<OwnerDashboard />} />
-            
           </Route>
         </Routes>
-        </div>
-      </MobileOptimizedLayout>
+      </AppLayout>
     </Router>
   );
 }
