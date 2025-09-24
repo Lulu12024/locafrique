@@ -16,7 +16,7 @@ export function MobileBottomNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user , profile  } = useAuth();
 
   const navItems: NavItem[] = [
     {
@@ -35,7 +35,7 @@ export function MobileBottomNavigation() {
       id: 'profile',
       label: t('nav.profile', 'Profil'),
       icon: User,
-      path: user ? '/overview' : '/auth'
+      path: user && profile?.id ? `/owner/profile/${profile.id}` : '/auth'
     }
   ];
 
