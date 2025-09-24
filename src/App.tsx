@@ -1,3 +1,4 @@
+// src/App.tsx - Section des routes à modifier (ajoutez la ligne marquée d'un commentaire)
 
 import React from "react";
 import { BrowserRouter as Router, Route, Routes, useLocation } from "react-router-dom";
@@ -9,6 +10,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Search from "./pages/Search";
 import EquipmentDetail from "./pages/EquipmentDetail";
+import OwnerProfile from "./pages/OwnerProfile"; // AJOUT DE L'IMPORT
 import Overview from "./pages/Overview";
 import Messaging from "./pages/Messaging";
 import HowItWorks from "./pages/HowItWorks";
@@ -30,6 +32,10 @@ import MySettings from "./pages/MySettings";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import WalletRechargeSuccess from '@/pages/WalletRechargeSuccess';
 import { OwnerDashboard } from "./pages/OwnerDashboard";
+import ProfileSettingsPage from "./pages/ProfileSettingsPage";
+import NotificationSettingsPage from "./pages/NotificationSettingsPage";
+import SecuritySettingsPage from "./pages/SecuritySettingsPage";
+
 
 // Composant pour gérer le layout conditionnel
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -37,7 +43,9 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   
   // Pages qui ne doivent PAS avoir la navigation (navbar + bottom navigation)
   const detailPages = [
-    '/equipments/details'
+    '/equipments/details',
+    '/owner/profile' , // AJOUT DE LA PAGE OWNER PROFILE
+    '/settings'
   ];
   
   // Vérifier si on est sur une page de détails
@@ -76,6 +84,7 @@ function App() {
           <Route path="/auth" element={<Auth />} />
           <Route path="/search" element={<Search />} />
           <Route path="/equipments/details/:id" element={<EquipmentDetail />} />
+          <Route path="/owner/profile/:id" element={<OwnerProfile />} />  {/* NOUVELLE ROUTE */}
           <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/become-owner" element={<BecomeOwner />} />
           <Route path="/about" element={<About />} />
@@ -100,6 +109,10 @@ function App() {
             <Route path="/activity" element={<Activity />} />
             <Route path="/owner-dashboard" element={<OwnerDashboard />} />
             <Route path="/received-bookings" element={<OwnerDashboard />} />
+
+            <Route path="/settings/profile" element={<ProfileSettingsPage />} />
+            <Route path="/settings/notifications" element={<NotificationSettingsPage />} />
+            <Route path="/settings/security" element={<SecuritySettingsPage />} />
           </Route>
         </Routes>
       </AppLayout>

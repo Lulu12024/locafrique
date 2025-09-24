@@ -409,6 +409,11 @@ const EquipmentDetail = () => {
     }
   };
 
+  const handleOwnerClick = () => {
+    if (equipment.owner?.id) {
+      navigate(`/owner/profile/${equipment.owner.id}`);
+    }
+  };
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('fr-FR').format(price);
   };
@@ -738,7 +743,11 @@ const EquipmentDetail = () => {
                         <MessageSquare className="h-4 w-4 mr-2" />
                         Contacter
                       </Button>
-                      <Button variant="ghost" size="sm" className="text-xs">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-xs"
+                        onClick={handleOwnerClick} >
                         <Award className="h-3 w-3 mr-1" />
                         Voir profil
                       </Button>
