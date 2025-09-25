@@ -94,6 +94,7 @@ function App() {
           <Route path="/payment-success" element={<PaymentSuccess />} />
           <Route path="*" element={<NotFound />} />
           <Route path="/wallet-recharge-success" element={<WalletRechargeSuccess />} />
+          <Route path="/owner/myprofile/:id" element={<OwnerProfile />} />
           
           {/* Protected Routes */}
           <Route element={<RequireAuth />}>

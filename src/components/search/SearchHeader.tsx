@@ -46,8 +46,7 @@ export const SearchHeader: React.FC<SearchHeaderProps> = ({
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <>
-                <Search className="h-5 w-5 mr-2" />
-                Rechercher
+                <Search className="h-5 w-5" />
               </>
             )}
           </Button>

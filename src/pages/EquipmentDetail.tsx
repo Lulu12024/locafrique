@@ -701,57 +701,72 @@ const EquipmentDetail = () => {
               <Card>
                 <CardContent className={`${isMobile ? 'p-4' : 'p-6'}`}>
                   <h3 className="text-lg font-semibold mb-4">Propriétaire</h3>
-                  <div className={`flex items-center ${isMobile ? 'space-x-3' : 'space-x-4'}`}>
-                    <Avatar className={`${isMobile ? 'w-12 h-12' : 'w-16 h-16'} flex-shrink-0`}>
-                      <AvatarImage src={equipment.owner?.avatar_url} />
-                      <AvatarFallback>
-                        {equipment.owner?.first_name?.[0]}{equipment.owner?.last_name?.[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 flex-wrap">
-                        <h4 className={`font-semibold ${isMobile ? 'text-base' : 'text-lg'} truncate`}>
-                          {equipment.owner?.first_name} {equipment.owner?.last_name}
-                        </h4>
-                        <Badge className="bg-blue-100 text-blue-800 flex-shrink-0">
-                          <Shield className="h-3 w-3 mr-1" />
-                          Vérifié
-                        </Badge>
-                      </div>
-                      <p className="text-gray-600 text-sm">
-                        {equipment.owner?.user_type === 'proprietaire' ? 'Propriétaire professionnel' : 'Particulier'}
-                      </p>
-                      <div className={`flex items-center ${isMobile ? 'flex-wrap gap-2' : 'space-x-4'} mt-2 text-sm text-gray-600`}>
-                        <div className="flex items-center">
-                          <Star className="h-4 w-4 text-yellow-500 fill-current mr-1" />
-                          <span>
+                  
+                  {/* Layout responsive : vertical sur très petits écrans */}
+                  <div className={`${isMobile ? 'space-y-3' : 'flex items-center justify-between'}`}>
+                    {/* Section propriétaire cliquable */}
+                    <button 
+                      onClick={handleOwnerClick}
+                      className={`flex items-center space-x-3 ${isMobile ? 'w-full' : 'flex-1'} text-left hover:bg-gray-50 rounded-lg p-2 transition-colors group`}
+                    >
+                      {/* Avatar cliquable */}
+                      <Avatar className={`${isMobile ? 'w-12 h-12' : 'w-14 h-14'} flex-shrink-0`}>
+                        <AvatarImage src={equipment.owner?.avatar_url} />
+                        <AvatarFallback className="bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold">
+                          {equipment.owner?.first_name?.[0]}{equipment.owner?.last_name?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      
+                      {/* Informations propriétaire */}
+                      <div className="flex-1 min-w-0">
+                        {/* Nom + icône vérifiée */}
+                        <div className="flex items-center space-x-2 mb-1">
+                          <h4 className={`font-semibold ${isMobile ? 'text-base' : 'text-lg'} text-gray-900 group-hover:text-green-600 transition-colors truncate`}>
+                            {equipment.owner?.first_name} {equipment.owner?.last_name}
+                          </h4>
+                          <div className="flex items-center justify-center w-5 h-5 bg-green-500 rounded-full flex-shrink-0">
+                            <Shield className="h-3 w-3 text-white" />
+                          </div>
+                        </div>
+                        
+                        {/* Étoiles et évaluations - Layout amélioré pour mobile */}
+                        <div className="flex items-center space-x-1">
+                          <div className="flex items-center">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-4 w-4 ${
+                                  star <= Math.floor(realOwnerStats.averageRating)
+                                    ? 'text-yellow-400 fill-yellow-400'
+                                    : star <= realOwnerStats.averageRating
+                                    ? 'text-yellow-400 fill-yellow-400'
+                                    : 'text-gray-300'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-medium text-gray-900 ml-1 truncate`}>
                             {realOwnerStats.totalReviews > 0 
                               ? `${realOwnerStats.averageRating} (${realOwnerStats.totalReviews} avis)` 
                               : 'Nouveau propriétaire'
                             }
                           </span>
                         </div>
-                        <span>Taux de réponse: {equipmentStats.responseRate}%</span>
-                        {!isMobile && <span>Répond en 2h en moyenne</span>}
                       </div>
-                    </div>
+                    </button>
                     
-                    {/* BOUTON DE CONTACT MODERNISÉ - SANS TÉLÉPHONE */}
-                    <div className={`flex ${isMobile ? 'flex-col space-y-1' : 'flex-col space-y-2'} flex-shrink-0`}>
-                      <Button variant="outline" className={`flex items-center ${isMobile ? 'text-sm px-3 py-1' : ''}`}>
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                        Contacter
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-xs"
-                        onClick={handleOwnerClick} >
-                        <Award className="h-3 w-3 mr-1" />
-                        Voir profil
-                      </Button>
-                    </div>
+                    {/* Bouton contacter - Adaptatif selon la taille */}
+                    <Button 
+                      variant="outline" 
+                      className={`flex items-center ${
+                        isMobile 
+                          ? 'w-full justify-center py-3 text-sm' 
+                          : 'ml-3 px-6 py-3'
+                      } border-green-200 text-green-700 hover:bg-green-50 hover:border-green-300 transition-colors font-medium`}
+                    >
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Contacter
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

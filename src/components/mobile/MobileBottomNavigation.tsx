@@ -35,7 +35,7 @@ export function MobileBottomNavigation() {
       id: 'profile',
       label: t('nav.profile', 'Profil'),
       icon: User,
-      path: user && profile?.id ? `/owner/profile/${profile.id}` : '/auth'
+      path: user && profile?.id ? `/owner/myprofile/${profile.id}` : '/auth'
     }
   ];
 
