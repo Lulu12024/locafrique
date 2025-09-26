@@ -1,5 +1,5 @@
 // src/components/booking/ReservationModal.tsx
-// VERSION RESPONSIVE MOBILE
+// VERSION RESPONSIVE MOBILE - Indicateur horizontal
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -593,47 +593,22 @@ function ReservationModal({
                   </DialogTitle>
                   <p className="text-emerald-100 text-xs sm:text-sm mt-1 truncate">{validEquipment.title}</p>
                   
-                  {/* Indicateur de progression responsive */}
+                  {/* Indicateur de progression horizontal responsive - CORRIGÉ */}
                   <div className="mt-4 sm:mt-6">
-                    {/* Version mobile (vertical) */}
-                    <div className="flex sm:hidden justify-center">
-                      <div className="flex flex-col items-center space-y-2">
-                        {[1, 2, 3, 4, 5].map((step) => (
-                          <div key={step} className="flex items-center">
-                            <div className={cn(
-                              "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all",
-                              currentStep >= step 
-                                ? "bg-white text-emerald-600 shadow-lg" 
-                                : "bg-emerald-400 text-white"
-                            )}>
-                              {currentStep > step ? <CheckCircle className="h-4 w-4" /> : step}
-                            </div>
-                            {step < 5 && (
-                              <div className={cn(
-                                "w-1 h-8 ml-4 transition-all",
-                                currentStep > step ? "bg-white" : "bg-emerald-400"
-                              )} />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Version desktop (horizontal) */}
-                    <div className="hidden sm:flex items-center justify-between">
+                    <div className="flex items-center justify-between">
                       {[1, 2, 3, 4, 5].map((step) => (
                         <div key={step} className="flex items-center">
                           <div className={cn(
-                            "w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all",
+                            "w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all",
                             currentStep >= step 
                               ? "bg-white text-emerald-600 shadow-lg" 
                               : "bg-emerald-400 text-white"
                           )}>
-                            {currentStep > step ? <CheckCircle className="h-6 w-6" /> : step}
+                            {currentStep > step ? <CheckCircle className="h-4 w-4 sm:h-6 sm:w-6" /> : step}
                           </div>
                           {step < 5 && (
                             <div className={cn(
-                              "w-12 lg:w-16 h-1 mx-2 transition-all",
+                              "w-6 sm:w-12 lg:w-16 h-1 mx-1 sm:mx-2 transition-all",
                               currentStep > step ? "bg-white" : "bg-emerald-400"
                             )} />
                           )}
