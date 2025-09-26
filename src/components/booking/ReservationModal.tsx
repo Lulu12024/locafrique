@@ -317,30 +317,48 @@ function ReservationModal({
     }));
   };
 
-  // Gestion des dates avec validation
+  // Gestion des dates avec validation - VERSION PRODUCTION
   const handleStartDateChange = (date: Date | undefined) => {
-    if (date) {
-      console.log('Date de début sélectionnée:', date);
-      setSelectedStartDate(date);
-      
-      // Si la date de fin est antérieure ou égale à la nouvelle date de début, l'ajuster
-      if (selectedEndDate <= date) {
-        const newEndDate = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-        setSelectedEndDate(newEndDate);
-        console.log('Date de fin ajustée à:', newEndDate);
+    try {
+      if (date) {
+        console.log('Date de début sélectionnée:', date);
+        setSelectedStartDate(date);
+        
+        // Si la date de fin est antérieure ou égale à la nouvelle date de début, l'ajuster
+        if (selectedEndDate <= date) {
+          const newEndDate = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+          setSelectedEndDate(newEndDate);
+          console.log('Date de fin ajustée à:', newEndDate);
+        }
       }
+    } catch (error) {
+      console.error('Erreur lors de la sélection de date de début:', error);
     }
-    // Fermer le popover après un petit délai pour éviter la propagation
-    setTimeout(() => setIsStartDateOpen(false), 100);
+    
+    // Fermeture retardée pour éviter les problèmes de production
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        setIsStartDateOpen(false);
+      }, 150);
+    });
   };
 
   const handleEndDateChange = (date: Date | undefined) => {
-    if (date && date > selectedStartDate) {
-      console.log('Date de fin sélectionnée:', date);
-      setSelectedEndDate(date);
+    try {
+      if (date && date > selectedStartDate) {
+        console.log('Date de fin sélectionnée:', date);
+        setSelectedEndDate(date);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la sélection de date de fin:', error);
     }
-    // Fermer le popover après un petit délai pour éviter la propagation
-    setTimeout(() => setIsEndDateOpen(false), 100);
+    
+    // Fermeture retardée pour éviter les problèmes de production
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        setIsEndDateOpen(false);
+      }, 150);
+    });
   };
 
   // Gestion du fichier d'identité
@@ -589,8 +607,30 @@ function ReservationModal({
     <>
       {/* Modal principal de réservation - RESPONSIVE */}
       {modalMode === 'reservation' && (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-          <DialogContent className="w-full max-w-lg sm:max-w-2xl lg:max-w-4xl h-[95vh] sm:h-auto max-h-[95vh] p-0 overflow-hidden">
+        <Dialog open={isOpen} onOpenChange={(open) => {
+          // Empêcher la fermeture automatique si un calendrier est ouvert
+          if (!open && (isStartDateOpen || isEndDateOpen)) {
+            return;
+          }
+          onClose();
+        }}>
+          <DialogContent 
+            className="w-full max-w-lg sm:max-w-2xl lg:max-w-4xl h-[95vh] sm:h-auto max-h-[95vh] p-0 overflow-hidden"
+            onPointerDownOutside={(e) => {
+              // Empêcher la fermeture si on clique sur un calendrier
+              const target = e.target as HTMLElement;
+              if (target.closest('[data-radix-calendar]') || target.closest('[data-radix-popover-content]')) {
+                e.preventDefault();
+              }
+            }}
+            onInteractOutside={(e) => {
+              // Empêcher la fermeture si on interagit avec un calendrier
+              const target = e.target as HTMLElement;
+              if (target.closest('[data-radix-calendar]') || target.closest('[data-radix-popover-content]')) {
+                e.preventDefault();
+              }
+            }}
+          >
             <div className="flex flex-col h-full">
               <DialogHeader className="shrink-0">
                 <div className="bg-gradient-to-r from-emerald-600 to-blue-600 p-4 sm:p-6 text-white">
@@ -656,14 +696,32 @@ function ReservationModal({
                                 align="start"
                                 side="bottom"
                                 sideOffset={4}
-                                onPointerDownOutside={(e) => e.preventDefault()}
-                                onInteractOutside={(e) => e.preventDefault()}
+                                onPointerDownOutside={(e) => {
+                                  // Plus agressif pour la production
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onInteractOutside={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onEscapeKeyDown={(e) => {
+                                  e.preventDefault();
+                                  setIsStartDateOpen(false);
+                                }}
                               >
-                                <div onClick={(e) => e.stopPropagation()}>
+                                <div 
+                                  onClick={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onTouchStart={(e) => e.stopPropagation()}
+                                >
                                   <Calendar
                                     mode="single"
                                     selected={selectedStartDate}
-                                    onSelect={handleStartDateChange}
+                                    onSelect={(date) => {
+                                      // Wrapper pour s'assurer que l'événement ne se propage pas
+                                      setTimeout(() => handleStartDateChange(date), 0);
+                                    }}
                                     disabled={(date) => {
                                       const today = new Date();
                                       today.setHours(0, 0, 0, 0);
@@ -696,14 +754,32 @@ function ReservationModal({
                                 align="start"
                                 side="bottom"
                                 sideOffset={4}
-                                onPointerDownOutside={(e) => e.preventDefault()}
-                                onInteractOutside={(e) => e.preventDefault()}
+                                onPointerDownOutside={(e) => {
+                                  // Plus agressif pour la production
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onInteractOutside={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onEscapeKeyDown={(e) => {
+                                  e.preventDefault();
+                                  setIsEndDateOpen(false);
+                                }}
                               >
-                                <div onClick={(e) => e.stopPropagation()}>
+                                <div 
+                                  onClick={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onTouchStart={(e) => e.stopPropagation()}
+                                >
                                   <Calendar
                                     mode="single"
                                     selected={selectedEndDate}
-                                    onSelect={handleEndDateChange}
+                                    onSelect={(date) => {
+                                      // Wrapper pour s'assurer que l'événement ne se propage pas
+                                      setTimeout(() => handleEndDateChange(date), 0);
+                                    }}
                                     disabled={(date) => {
                                       const startDate = new Date(selectedStartDate);
                                       startDate.setHours(0, 0, 0, 0);
