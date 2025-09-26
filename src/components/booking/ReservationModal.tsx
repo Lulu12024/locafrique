@@ -320,20 +320,27 @@ function ReservationModal({
   // Gestion des dates avec validation
   const handleStartDateChange = (date: Date | undefined) => {
     if (date) {
+      console.log('Date de début sélectionnée:', date);
       setSelectedStartDate(date);
       
+      // Si la date de fin est antérieure ou égale à la nouvelle date de début, l'ajuster
       if (selectedEndDate <= date) {
-        setSelectedEndDate(new Date(date.getTime() + 24 * 60 * 60 * 1000));
+        const newEndDate = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+        setSelectedEndDate(newEndDate);
+        console.log('Date de fin ajustée à:', newEndDate);
       }
     }
-    setIsStartDateOpen(false);
+    // Fermer le popover après un petit délai pour éviter la propagation
+    setTimeout(() => setIsStartDateOpen(false), 100);
   };
 
   const handleEndDateChange = (date: Date | undefined) => {
     if (date && date > selectedStartDate) {
+      console.log('Date de fin sélectionnée:', date);
       setSelectedEndDate(date);
     }
-    setIsEndDateOpen(false);
+    // Fermer le popover après un petit délai pour éviter la propagation
+    setTimeout(() => setIsEndDateOpen(false), 100);
   };
 
   // Gestion du fichier d'identité
@@ -649,19 +656,23 @@ function ReservationModal({
                                 align="start"
                                 side="bottom"
                                 sideOffset={4}
+                                onPointerDownOutside={(e) => e.preventDefault()}
+                                onInteractOutside={(e) => e.preventDefault()}
                               >
-                                <Calendar
-                                  mode="single"
-                                  selected={selectedStartDate}
-                                  onSelect={handleStartDateChange}
-                                  disabled={(date) => {
-                                    const today = new Date();
-                                    today.setHours(0, 0, 0, 0);
-                                    return date < today;
-                                  }}
-                                  initialFocus
-                                  locale={undefined}
-                                />
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <Calendar
+                                    mode="single"
+                                    selected={selectedStartDate}
+                                    onSelect={handleStartDateChange}
+                                    disabled={(date) => {
+                                      const today = new Date();
+                                      today.setHours(0, 0, 0, 0);
+                                      return date < today;
+                                    }}
+                                    initialFocus
+                                    locale={undefined}
+                                  />
+                                </div>
                               </PopoverContent>
                             </Popover>
                           </div>
@@ -685,19 +696,23 @@ function ReservationModal({
                                 align="start"
                                 side="bottom"
                                 sideOffset={4}
+                                onPointerDownOutside={(e) => e.preventDefault()}
+                                onInteractOutside={(e) => e.preventDefault()}
                               >
-                                <Calendar
-                                  mode="single"
-                                  selected={selectedEndDate}
-                                  onSelect={handleEndDateChange}
-                                  disabled={(date) => {
-                                    const startDate = new Date(selectedStartDate);
-                                    startDate.setHours(0, 0, 0, 0);
-                                    return date <= startDate;
-                                  }}
-                                  initialFocus
-                                  locale={undefined}
-                                />
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <Calendar
+                                    mode="single"
+                                    selected={selectedEndDate}
+                                    onSelect={handleEndDateChange}
+                                    disabled={(date) => {
+                                      const startDate = new Date(selectedStartDate);
+                                      startDate.setHours(0, 0, 0, 0);
+                                      return date <= startDate;
+                                    }}
+                                    initialFocus
+                                    locale={undefined}
+                                  />
+                                </div>
                               </PopoverContent>
                             </Popover>
                           </div>
