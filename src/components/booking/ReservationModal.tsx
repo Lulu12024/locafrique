@@ -638,18 +638,29 @@ function ReservationModal({
                                 <Button
                                   variant="outline"
                                   className="w-full justify-start text-left font-normal text-sm"
+                                  onClick={() => setIsStartDateOpen(true)}
                                 >
                                   <CalendarIcon className="mr-2 h-4 w-4" />
                                   <span className="truncate">{safeFormatDate(selectedStartDate, 'long')}</span>
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
+                              <PopoverContent 
+                                className="w-auto p-0 z-[10000]" 
+                                align="start"
+                                side="bottom"
+                                sideOffset={4}
+                              >
                                 <Calendar
                                   mode="single"
                                   selected={selectedStartDate}
                                   onSelect={handleStartDateChange}
-                                  disabled={(date) => date < new Date()}
+                                  disabled={(date) => {
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    return date < today;
+                                  }}
                                   initialFocus
+                                  locale={undefined}
                                 />
                               </PopoverContent>
                             </Popover>
@@ -663,18 +674,29 @@ function ReservationModal({
                                 <Button
                                   variant="outline"
                                   className="w-full justify-start text-left font-normal text-sm"
+                                  onClick={() => setIsEndDateOpen(true)}
                                 >
                                   <CalendarIcon className="mr-2 h-4 w-4" />
                                   <span className="truncate">{safeFormatDate(selectedEndDate, 'long')}</span>
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
+                              <PopoverContent 
+                                className="w-auto p-0 z-[10000]" 
+                                align="start"
+                                side="bottom"
+                                sideOffset={4}
+                              >
                                 <Calendar
                                   mode="single"
                                   selected={selectedEndDate}
                                   onSelect={handleEndDateChange}
-                                  disabled={(date) => date <= selectedStartDate}
+                                  disabled={(date) => {
+                                    const startDate = new Date(selectedStartDate);
+                                    startDate.setHours(0, 0, 0, 0);
+                                    return date <= startDate;
+                                  }}
                                   initialFocus
+                                  locale={undefined}
                                 />
                               </PopoverContent>
                             </Popover>
