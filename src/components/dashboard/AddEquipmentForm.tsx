@@ -27,7 +27,7 @@ import { useEquipments } from "@/hooks/useEquipments";
 import { useStorage } from "@/hooks/useStorage";
 import { toast } from "@/components/ui/use-toast";
 import { EQUIPMENT_CATEGORIES, getCategoryOptions, getSubcategoryOptions } from "@/data/categories";
-
+                                                        
 interface AddEquipmentFormProps {
   onSuccess?: () => void;
   onCancel?: () => void;

@@ -1,4 +1,4 @@
-// src/pages/ProfileSettingsPage.tsx
+// src/pages/ProfileSettingsPage.tsx - VERSION CORRIGÉE
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +21,8 @@ import {
   Camera,
   Loader2,
   Shield,
-  AlertTriangle
+  AlertTriangle,
+  Clock
 } from 'lucide-react';
 import { useAuth } from '@/hooks/auth';
 import { supabase } from '@/integrations/supabase/client';
@@ -30,11 +31,21 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 const ProfileSettingsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile, fetchUserProfile } = useAuth(); // ✅ Ajout de fetchUserProfile
   const isMobile = useIsMobile();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
+
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [verificationSubmitted, setVerificationSubmitted] = useState(false);
+  const [verificationStatusDetailed, setVerificationStatusDetailed] = useState<{
+    status: 'none' | 'pending' | 'approved' | 'rejected';
+    reason?: string;
+  }>({ status: 'none' });
+
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -67,56 +78,161 @@ const ProfileSettingsPage: React.FC = () => {
 
       // Calculer le statut de vérification
       setVerificationStatus({
-        identity: !!(profile.id_document_url && profile.is_verified),
+        identity: verificationStatusDetailed.status === 'approved', // Seulement vert si approuvé
         email: !!user?.email,
         phone: !!profile.phone_number,
         address: !!(profile.address && profile.city)
       });
     }
-  }, [profile, user]);
+  }, [profile, user, verificationStatusDetailed]);
 
+
+  useEffect(() => {
+    // Forcer le chargement du profil si pas encore chargé
+    if (user && !profile && fetchUserProfile) {
+      console.log("🔄 Forçage du chargement du profil pour:", user.email);
+      fetchUserProfile(user);
+    }
+  }, [user, profile, fetchUserProfile]);
+
+  // Debug : voir ce qui se passe
+  useEffect(() => {
+      console.log("📊 État actuel:");
+      console.log("- user:", user?.email);
+      console.log("- profile:", profile);
+      console.log("- formData:", formData);
+    }, [user, profile, formData]);
+
+    useEffect(() => {
+    loadVerificationStatus();
+  }, [user]);
+
+  const loadVerificationStatus = async () => {
+    if (!user?.id) return;
+    
+    try {
+      // Charger le statut de vérification depuis la DB
+      const { data, error } = await supabase
+        .from('identity_verifications')
+        .select('verification_status, rejection_reason')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erreur chargement vérification:', error);
+        return;
+      }
+      
+      if (data) {
+        setVerificationStatusDetailed({
+          status: data.verification_status as 'pending' | 'approved' | 'rejected',
+          reason: data.rejection_reason || undefined
+        });
+        setVerificationSubmitted(true);
+      } else {
+        setVerificationStatusDetailed({ status: 'none' });
+        setVerificationSubmitted(false);
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validation
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    
+    if (file.size > maxSize) {
+      toast({
+        title: "Fichier trop volumineux",
+        description: "Le fichier ne doit pas dépasser 5MB.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Format non supporté",
+        description: "Formats acceptés : JPG, PNG, PDF",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSelectedFile(file);
+    
+    // Créer une preview pour les images
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => setPreviewUrl(e.target?.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setPreviewUrl(null);
+    }
+  };
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // 🚀 SOLUTION : Sauvegarde unifiée en une seule transaction
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!user?.id) {
+      toast({
+        title: "Erreur",
+        description: "Utilisateur non connecté",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsSaving(true);
 
     try {
-      const result = await updateProfile({
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        phone_number: formData.phone_number || null,
-        avatar_url: null
+      // ✅ UNE SEULE REQUÊTE pour tout sauvegarder
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          first_name: formData.first_name.trim(),
+          last_name: formData.last_name.trim(),
+          phone_number: formData.phone_number.trim() || null,
+          address: formData.address.trim() || null,
+          city: formData.city.trim() || null,
+          country: formData.country.trim() || null,
+          id_number: formData.id_number.trim() || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour:', error);
+        throw error;
+      }
+
+      // ✅ Recharger le profil pour s'assurer que les données sont à jour
+      if (fetchUserProfile) {
+        await fetchUserProfile(user);
+      }
+
+      toast({
+        title: "✅ Profil mis à jour",
+        description: "Vos informations ont été sauvegardées avec succès.",
       });
 
-      if (result.success) {
-        // Mise à jour des informations supplémentaires
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            address: formData.address || null,
-            city: formData.city || null,
-            country: formData.country || null,
-            id_number: formData.id_number || null
-          })
-          .eq('id', user?.id);
-
-        if (error) throw error;
-
-        toast({
-          title: "Profil mis à jour",
-          description: "Vos informations ont été mises à jour avec succès.",
-        });
-      } else {
-        throw new Error(result.error);
-      }
     } catch (error: any) {
+      console.error('❌ Erreur:', error);
       toast({
-        title: "Erreur",
-        description: error.message || "Impossible de mettre à jour votre profil.",
+        title: "❌ Erreur de sauvegarde",
+        description: error.message || "Impossible de sauvegarder vos informations.",
         variant: "destructive"
       });
     } finally {
@@ -124,61 +240,220 @@ const ProfileSettingsPage: React.FC = () => {
     }
   };
 
+  // 🚀 AMÉLIORATION : Upload de document avec validation renforcée
   const handleDocumentUpload = async (file: File) => {
     if (!user?.id) return;
 
+    // Validation du fichier
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    
+    if (file.size > maxSize) {
+      toast({
+        title: "Fichier trop volumineux",
+        description: "Le fichier ne doit pas dépasser 5MB.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Format non supporté", 
+        description: "Formats acceptés : JPG, PNG, PDF",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setUploadingDocument(true);
+
     try {
-      // Upload vers Supabase Storage
+      // 1. Upload vers Supabase Storage avec chemin organisé
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-identity-${Date.now()}.${fileExt}`;
+      const fileName = `${user.id}/identity-${Date.now()}.${fileExt}`;
+      
+      console.log("📤 Upload du fichier:", fileName);
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('documents')
-        .upload(fileName, file);
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("❌ Erreur upload:", uploadError);
+        throw uploadError;
+      }
 
-      // Obtenir l'URL publique
+      console.log("✅ Fichier uploadé:", uploadData);
+
+      // 2. Obtenir l'URL publique
       const { data: urlData } = supabase.storage
         .from('documents')
         .getPublicUrl(fileName);
 
-      // Sauvegarder dans la base de données
+      console.log("🔗 URL générée:", urlData.publicUrl);
+
+      // 3. Créer l'entrée de vérification
+      const { data: verificationData, error: dbError } = await supabase
+        .from('identity_verifications')
+        .insert({
+          user_id: user.id,
+          document_type: 'identity_card',
+          document_url: urlData.publicUrl,
+          verification_status: 'pending',
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error("❌ Erreur DB:", dbError);
+        throw dbError;
+      }
+
+      console.log("📋 Vérification créée:", verificationData);
+
+      // 4. Mettre à jour le profil
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ 
+          id_document_url: urlData.publicUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (profileError) {
+        console.error("❌ Erreur profil:", profileError);
+        throw profileError;
+      }
+
+      // 5. Recharger le profil
+      if (fetchUserProfile) {
+        await fetchUserProfile(user);
+      }
+
+      toast({
+        title: "📄 Document envoyé",
+        description: "Votre document d'identité a été envoyé pour vérification. Vous recevrez une notification une fois vérifié.",
+      });
+
+      setVerificationStatus(prev => ({ ...prev, identity: true }));
+
+    } catch (error: any) {
+      console.error("❌ Erreur complète:", error);
+      toast({
+        title: "❌ Erreur d'upload",
+        description: error.message || "Impossible d'envoyer le document. Vérifiez que le bucket 'documents' existe.",
+        variant: "destructive"
+      });
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+
+  const handleSubmitVerification = async () => {
+    if (!user?.id || !selectedFile) {
+      toast({
+        title: "Informations manquantes",
+        description: "Veuillez sélectionner un fichier et saisir le numéro de pièce d'identité.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!formData.id_number.trim()) {
+      toast({
+        title: "Numéro requis",
+        description: "Veuillez saisir le numéro de votre pièce d'identité.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setUploadingDocument(true);
+
+    try {
+      // 1. Upload du fichier
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${user.id}/identity-${Date.now()}.${fileExt}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(fileName, selectedFile, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // 2. URL publique
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(fileName);
+
+      // 3. Créer l'entrée de vérification
       const { error: dbError } = await supabase
         .from('identity_verifications')
         .insert({
           user_id: user.id,
-          document_type: 'identity',
+          document_type: 'identity_card',
           document_url: urlData.publicUrl,
-          verification_status: 'pending'
+          document_number: formData.id_number.trim(),
+          verification_status: 'pending',
+          created_at: new Date().toISOString()
         });
 
       if (dbError) throw dbError;
 
-      // Mettre à jour le profil
+      // 4. Mettre à jour le profil avec l'URL du document
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({ id_document_url: urlData.publicUrl })
+        .update({ 
+          id_document_url: urlData.publicUrl,
+          id_number: formData.id_number.trim(),
+          updated_at: new Date().toISOString()
+        })
         .eq('id', user.id);
 
       if (profileError) throw profileError;
 
+      // 5. Mettre à jour l'état local
+      setVerificationStatusDetailed({ status: 'pending' });
+      setVerificationSubmitted(true);
+      setSelectedFile(null);
+      setPreviewUrl(null);
+
       toast({
-        title: "Document envoyé",
-        description: "Votre document d'identité a été envoyé pour vérification.",
+        title: "Document soumis",
+        description: "Votre document a été envoyé pour vérification. Vous recevrez une notification une fois traité.",
       });
 
-      setVerificationStatus(prev => ({ ...prev, identity: true }));
+      // Recharger le profil
+      if (fetchUserProfile) {
+        await fetchUserProfile(user);
+      }
+
     } catch (error: any) {
+      console.error("Erreur soumission:", error);
       toast({
-        title: "Erreur d'upload",
+        title: "Erreur",
         description: error.message || "Impossible d'envoyer le document.",
         variant: "destructive"
       });
     } finally {
       setUploadingDocument(false);
     }
+  };
+
+  const handleResetVerification = () => {
+    setVerificationStatusDetailed({ status: 'none' });
+    setVerificationSubmitted(false);
+    setSelectedFile(null);
+    setPreviewUrl(null);
   };
 
   const getCompletionPercentage = () => {
@@ -368,40 +643,147 @@ const ProfileSettingsPage: React.FC = () => {
                     value={formData.id_number}
                     onChange={handleInputChange}
                     placeholder="Numéro CNI, passeport..."
+                    disabled={verificationSubmitted && verificationStatusDetailed.status !== 'rejected'}
                   />
                 </div>
 
                 <div>
                   <Label>Document d'identité</Label>
                   <div className="mt-2">
-                    {profile?.id_document_url ? (
-                      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="h-5 w-5 text-green-600" />
-                          <span className="text-sm text-green-800">Document envoyé</span>
-                        </div>
-                        <Badge variant="secondary" className="bg-green-100 text-green-700">
-                          {profile.is_verified ? 'Vérifié' : 'En attente'}
-                        </Badge>
+                    {verificationSubmitted ? (
+                      // ÉTAT APRÈS SOUMISSION
+                      <div>
+                        {verificationStatusDetailed.status === 'pending' && (
+                          <div className="flex items-center justify-between p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <Clock className="h-6 w-6 text-orange-600" />
+                              <div>
+                                <p className="font-medium text-orange-800">Document en cours de vérification</p>
+                                <p className="text-sm text-orange-600">
+                                  Notre équipe examine votre document. Cela peut prendre 24-48h.
+                                </p>
+                              </div>
+                            </div>
+                            <Badge className="bg-orange-100 text-orange-700">
+                              En attente
+                            </Badge>
+                          </div>
+                        )}
+
+                        {verificationStatusDetailed.status === 'approved' && (
+                          <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <CheckCircle className="h-6 w-6 text-green-600" />
+                              <div>
+                                <p className="font-medium text-green-800">Document vérifié</p>
+                                <p className="text-sm text-green-600">
+                                  Votre identité a été confirmée par notre équipe.
+                                </p>
+                              </div>
+                            </div>
+                            <Badge className="bg-green-100 text-green-700">
+                              Vérifié
+                            </Badge>
+                          </div>
+                        )}
+
+                        {verificationStatusDetailed.status === 'rejected' && (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-lg">
+                              <div className="flex items-center gap-3">
+                                <XCircle className="h-6 w-6 text-red-600" />
+                                <div>
+                                  <p className="font-medium text-red-800">Document rejeté</p>
+                                  <p className="text-sm text-red-600">
+                                    {verificationStatusDetailed.reason || "Votre document n'a pas pu être vérifié."}
+                                  </p>
+                                </div>
+                              </div>
+                              <Badge className="bg-red-100 text-red-700">
+                                Rejeté
+                              </Badge>
+                            </div>
+                            
+                            <Button 
+                              onClick={handleResetVerification}
+                              variant="outline"
+                              className="w-full"
+                            >
+                              Soumettre un nouveau document
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                        <input
-                          type="file"
-                          id="document-upload"
-                          className="hidden"
-                          accept="image/*,.pdf"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleDocumentUpload(file);
-                          }}
-                        />
-                        <label htmlFor="document-upload" className="cursor-pointer">
-                          <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                          <p className="text-sm text-gray-600">
-                            Cliquer pour télécharger votre pièce d'identité
-                          </p>
-                        </label>
+                      // ÉTAT AVANT SOUMISSION
+                      <div className="space-y-4">
+                        {/* Sélection de fichier */}
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                          <input
+                            type="file"
+                            id="document-upload"
+                            className="hidden"
+                            accept="image/*,.pdf"
+                            onChange={handleFileSelect}
+                          />
+                          <label htmlFor="document-upload" className="cursor-pointer">
+                            {selectedFile ? (
+                              <div className="space-y-2">
+                                <FileText className="h-8 w-8 mx-auto text-green-500" />
+                                <p className="text-sm font-medium text-green-700">
+                                  Fichier sélectionné: {selectedFile.name}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Cliquez pour changer de fichier
+                                </p>
+                              </div>
+                            ) : (
+                              <div>
+                                <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                                <p className="text-sm text-gray-600">
+                                  Cliquer pour sélectionner votre pièce d'identité
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  JPG, PNG, PDF (max 5MB)
+                                </p>
+                              </div>
+                            )}
+                          </label>
+                        </div>
+
+                        {/* Preview si image */}
+                        {previewUrl && (
+                          <div className="mt-4">
+                            <img 
+                              src={previewUrl} 
+                              alt="Aperçu du document" 
+                              className="max-h-40 mx-auto rounded border"
+                            />
+                          </div>
+                        )}
+
+                        {/* Bouton de soumission */}
+                        <Button 
+                          onClick={handleSubmitVerification}
+                          disabled={!selectedFile || !formData.id_number.trim() || uploadingDocument}
+                          className="w-full"
+                        >
+                          {uploadingDocument ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Envoi en cours...
+                            </>
+                          ) : (
+                            <>
+                              <FileText className="h-4 w-4 mr-2" />
+                              Soumettre pour vérification
+                            </>
+                          )}
+                        </Button>
+
+                        <p className="text-xs text-gray-500 text-center">
+                          Une fois soumis, votre document sera examiné par notre équipe sous 24-48h
+                        </p>
                       </div>
                     )}
                   </div>
@@ -459,7 +841,7 @@ const ProfileSettingsPage: React.FC = () => {
           </form>
         </div>
       ) : (
-        // VERSION DESKTOP
+        // VERSION DESKTOP - même structure mais avec les corrections
         <div className="max-w-6xl mx-auto px-6 py-8">
           {/* Header desktop */}
           <div className="flex items-center gap-6 mb-8">
@@ -664,53 +1046,147 @@ const ProfileSettingsPage: React.FC = () => {
                         value={formData.id_number}
                         onChange={handleInputChange}
                         placeholder="Numéro CNI, passeport..."
+                        disabled={verificationSubmitted && verificationStatusDetailed.status !== 'rejected'}
                       />
                     </div>
 
                     <div>
                       <Label>Document d'identité</Label>
                       <div className="mt-2">
-                        {profile?.id_document_url ? (
-                          <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <CheckCircle className="h-6 w-6 text-green-600" />
-                              <div>
-                                <p className="font-medium text-green-800">Document envoyé</p>
-                                <p className="text-sm text-green-600">
-                                  {profile.is_verified ? 'Vérifié par notre équipe' : 'En cours de vérification'}
-                                </p>
+                        {verificationSubmitted ? (
+                          // ÉTAT APRÈS SOUMISSION
+                          <div>
+                            {verificationStatusDetailed.status === 'pending' && (
+                              <div className="flex items-center justify-between p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <Clock className="h-6 w-6 text-orange-600" />
+                                  <div>
+                                    <p className="font-medium text-orange-800">Document en cours de vérification</p>
+                                    <p className="text-sm text-orange-600">
+                                      Notre équipe examine votre document. Cela peut prendre 24-48h.
+                                    </p>
+                                  </div>
+                                </div>
+                                <Badge className="bg-orange-100 text-orange-700">
+                                  En attente
+                                </Badge>
                               </div>
-                            </div>
-                            <Badge className={profile.is_verified ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
-                              {profile.is_verified ? 'Vérifié' : 'En attente'}
-                            </Badge>
+                            )}
+
+                            {verificationStatusDetailed.status === 'approved' && (
+                              <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <CheckCircle className="h-6 w-6 text-green-600" />
+                                  <div>
+                                    <p className="font-medium text-green-800">Document vérifié</p>
+                                    <p className="text-sm text-green-600">
+                                      Votre identité a été confirmée par notre équipe.
+                                    </p>
+                                  </div>
+                                </div>
+                                <Badge className="bg-green-100 text-green-700">
+                                  Vérifié
+                                </Badge>
+                              </div>
+                            )}
+
+                            {verificationStatusDetailed.status === 'rejected' && (
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-lg">
+                                  <div className="flex items-center gap-3">
+                                    <XCircle className="h-6 w-6 text-red-600" />
+                                    <div>
+                                      <p className="font-medium text-red-800">Document rejeté</p>
+                                      <p className="text-sm text-red-600">
+                                        {verificationStatusDetailed.reason || "Votre document n'a pas pu être vérifié."}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Badge className="bg-red-100 text-red-700">
+                                    Rejeté
+                                  </Badge>
+                                </div>
+                                
+                                <Button 
+                                  onClick={handleResetVerification}
+                                  variant="outline"
+                                  className="w-full"
+                                >
+                                  Soumettre un nouveau document
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         ) : (
-                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                            <input
-                              type="file"
-                              id="document-upload-desktop"
-                              className="hidden"
-                              accept="image/*,.pdf"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleDocumentUpload(file);
-                              }}
-                              disabled={uploadingDocument}
-                            />
-                            <label htmlFor="document-upload-desktop" className="cursor-pointer">
+                          // ÉTAT AVANT SOUMISSION
+                          <div className="space-y-4">
+                            {/* Sélection de fichier */}
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                              <input
+                                type="file"
+                                id="document-upload"
+                                className="hidden"
+                                accept="image/*,.pdf"
+                                onChange={handleFileSelect}
+                              />
+                              <label htmlFor="document-upload" className="cursor-pointer">
+                                {selectedFile ? (
+                                  <div className="space-y-2">
+                                    <FileText className="h-8 w-8 mx-auto text-green-500" />
+                                    <p className="text-sm font-medium text-green-700">
+                                      Fichier sélectionné: {selectedFile.name}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      Cliquez pour changer de fichier
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                                    <p className="text-sm text-gray-600">
+                                      Cliquer pour sélectionner votre pièce d'identité
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      JPG, PNG, PDF (max 5MB)
+                                    </p>
+                                  </div>
+                                )}
+                              </label>
+                            </div>
+
+                            {/* Preview si image */}
+                            {previewUrl && (
+                              <div className="mt-4">
+                                <img 
+                                  src={previewUrl} 
+                                  alt="Aperçu du document" 
+                                  className="max-h-40 mx-auto rounded border"
+                                />
+                              </div>
+                            )}
+
+                            {/* Bouton de soumission */}
+                            <Button 
+                              onClick={handleSubmitVerification}
+                              disabled={!selectedFile || !formData.id_number.trim() || uploadingDocument}
+                              className="w-full"
+                            >
                               {uploadingDocument ? (
-                                <Loader2 className="h-12 w-12 mx-auto text-gray-400 mb-4 animate-spin" />
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Envoi en cours...
+                                </>
                               ) : (
-                                <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                                <>
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  Soumettre pour vérification
+                                </>
                               )}
-                              <p className="text-lg font-medium mb-2">
-                                {uploadingDocument ? 'Upload en cours...' : 'Télécharger votre pièce d\'identité'}
-                              </p>
-                              <p className="text-sm text-gray-600">
-                                Formats acceptés : JPG, PNG, PDF (max 5MB)
-                              </p>
-                            </label>
+                            </Button>
+
+                            <p className="text-xs text-gray-500 text-center">
+                              Une fois soumis, votre document sera examiné par notre équipe sous 24-48h
+                            </p>
                           </div>
                         )}
                       </div>

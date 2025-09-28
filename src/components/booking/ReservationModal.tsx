@@ -599,7 +599,7 @@ function ReservationModal({
           onClose();
         }}>
           <DialogContent 
-            className="w-full max-w-lg sm:max-w-2xl lg:max-w-4xl h-[95vh] sm:h-auto max-h-[95vh] p-0 overflow-hidden"
+            className="w-full max-w-lg sm:max-w-2xl lg:max-w-4xl h-[85vh] sm:h-auto max-h-[85vh] p-0 overflow-hidden"
             onPointerDownOutside={(e) => {
               // Empêcher la fermeture si on clique sur un calendrier
               const target = e.target as HTMLElement;
@@ -610,36 +610,36 @@ function ReservationModal({
             onInteractOutside={(e) => {
               // Empêcher la fermeture si on interagit avec un calendrier
               const target = e.target as HTMLElement;
-              if (target.closest('[data-radix-calendar]') || target.closest('[data-radix-popover-content]')) {
+              if (target.closest('[data-radix-calendar]') || target.closest('[data-radix-popover-content]') || target.closest('.calendar-container')) {
                 e.preventDefault();
               }
             }}
           >
             <div className="flex flex-col h-full">
               <DialogHeader className="shrink-0">
-                <div className="bg-gradient-to-r from-emerald-600 to-blue-600 p-4 sm:p-6 text-white">
-                  <DialogTitle className="text-lg sm:text-2xl font-bold flex items-center">
-                    <Zap className="mr-2 sm:mr-3 h-5 w-5 sm:h-6 sm:w-6" />
+                <div className="bg-gradient-to-r from-emerald-600 to-blue-600 p-3 sm:p-6 text-white">
+                  <DialogTitle className="text-base sm:text-2xl font-bold flex items-center">
+                    <Zap className="mr-2 sm:mr-3 h-4 w-4 sm:h-6 sm:w-6" />
                     Réservation Express
                   </DialogTitle>
                   <p className="text-emerald-100 text-xs sm:text-sm mt-1 truncate">{validEquipment.title}</p>
                   
                   {/* Indicateur de progression horizontal responsive - CORRIGÉ */}
-                  <div className="mt-4 sm:mt-6">
+                  <div className="mt-3 sm:mt-6">
                     <div className="flex items-center justify-between">
                       {[1, 2, 3, 4, 5].map((step) => (
                         <div key={step} className="flex items-center">
                           <div className={cn(
-                            "w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all",
+                            "w-6 h-6 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all",
                             currentStep >= step 
                               ? "bg-white text-emerald-600 shadow-lg" 
                               : "bg-emerald-400 text-white"
                           )}>
-                            {currentStep > step ? <CheckCircle className="h-4 w-4 sm:h-6 sm:w-6" /> : step}
+                            {currentStep > step ? <CheckCircle className="h-3 w-3 sm:h-6 sm:w-6" /> : step}
                           </div>
                           {step < 5 && (
                             <div className={cn(
-                              "w-6 sm:w-12 lg:w-16 h-1 mx-1 sm:mx-2 transition-all",
+                              "w-4 sm:w-12 lg:w-16 h-1 mx-1 sm:mx-2 transition-all",
                               currentStep > step ? "bg-white" : "bg-emerald-400"
                             )} />
                           )}
@@ -652,7 +652,7 @@ function ReservationModal({
 
               {/* Corps du modal avec scroll */}
               <div className="flex-1 overflow-y-auto">
-                <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+                <div className="p-3 sm:p-6 space-y-3 sm:space-y-6">
                   {/* Étape 1: Sélection des dates */}
                   {currentStep === 1 && (
                     <div className="space-y-4 sm:space-y-6">
@@ -1080,7 +1080,7 @@ function ReservationModal({
               </div>
 
               {/* Navigation fixe en bas */}
-              <div className="shrink-0 p-4 sm:p-6 border-t bg-white">
+              <div className="shrink-0 p-3 sm:p-6 border-t bg-white">
                 <div className="flex justify-between">
                   <Button
                     variant="outline"

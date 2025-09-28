@@ -1,16 +1,16 @@
-// src/pages/MyEquipments.tsx - Version corrigée avec modal
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Package, ArrowLeft, Loader2 } from "lucide-react";
+import { Plus, Package, ArrowLeft, Loader2, MoreVertical } from "lucide-react";
 import AddEquipmentModal from "@/components/AddEquipmentModal";
 import { useEquipments } from "@/hooks/useEquipments";
 import { EquipmentData } from "@/types/supabase";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const MyEquipments: React.FC = () => {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [equipments, setEquipments] = useState<EquipmentData[]>([]);
   const { fetchUserEquipments, isLoading } = useEquipments();
@@ -44,91 +44,116 @@ const MyEquipments: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+    <div className={`min-h-screen bg-gray-50 ${isMobile ? 'pb-safe-bottom' : ''}`}>
+      {/* Header responsive */}
+      <div className={`
+        ${isMobile 
+          ? 'pt-safe-top px-4 py-4 bg-white border-b sticky top-0 z-10' 
+          : 'max-w-7xl mx-auto px-4 py-8'
+        }
+      `}>
+        <div className={`
+          flex items-center justify-between
+          ${isMobile ? 'mb-0' : 'mb-8'}
+        `}>
           <div className="flex items-center space-x-4">
             <Button
               onClick={() => navigate(-1)}
               variant="outline"
-              size="sm"
+              size={isMobile ? "sm" : "default"}
               className="flex items-center space-x-2"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>Retour</span>
             </Button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Mes équipements</h1>
-              <p className="text-gray-600">Gérez vos équipements en location</p>
+              <h1 className={`font-bold text-gray-900 ${isMobile ? 'text-xl' : 'text-2xl'}`}>
+                Mes équipements
+              </h1>
+              {!isMobile && (
+                <p className="text-gray-600">Gérez vos équipements en location</p>
+              )}
             </div>
           </div>
-          <Button 
-            onClick={handleOpenModal}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Ajouter un équipement
-          </Button>
+          
+          {/* Bouton d'ajout responsive */}
+          {isMobile ? (
+            <Button 
+              onClick={handleOpenModal}
+              size="sm"
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button 
+              onClick={handleOpenModal}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Ajouter un équipement
+            </Button>
+          )}
         </div>
+      </div>
 
-        {/* Contenu principal */}
-        <Card>
-          <CardContent className="p-6">
+      {/* Contenu principal responsive */}
+      <div className={`${isMobile ? 'px-4 py-4' : 'max-w-7xl mx-auto px-4'}`}>
+        <Card className={`${isMobile ? 'border-0 shadow-none bg-transparent' : ''}`}>
+          <CardContent className={`${isMobile ? 'p-0' : 'p-6'}`}>
             {isLoading ? (
-              <div className="text-center py-12">
-                <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin text-green-600" />
+              <div className={`text-center ${isMobile ? 'py-8' : 'py-12'}`}>
+                <Loader2 className={`mx-auto mb-4 animate-spin text-green-600 ${isMobile ? 'h-6 w-6' : 'h-8 w-8'}`} />
                 <p className="text-gray-600">Chargement de vos équipements...</p>
               </div>
             ) : equipments.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              /* Liste des équipements responsive */
+              <div className={`
+                grid gap-4
+                ${isMobile 
+                  ? 'grid-cols-1' 
+                  : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                }
+              `}>
                 {equipments.map((equipment) => (
-                  <Card 
+                  <EquipmentCard 
                     key={equipment.id} 
-                    className="cursor-pointer hover:shadow-lg transition-shadow"
+                    equipment={equipment}
+                    isMobile={isMobile}
                     onClick={() => handleEquipmentClick(equipment.id)}
-                  >
-                    <div className="aspect-video bg-gray-100 rounded-t-lg">
-                      {/* Image de l'équipement */}
-                      {Array.isArray(equipment.images) && equipment.images.length > 0 ? (
-                        <img 
-                          src={equipment.images[0].image_url} 
-                          alt={equipment.title}
-                          className="w-full h-full object-cover rounded-t-lg"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Package className="h-12 w-12 text-gray-400" />
-                        </div>
-                      )}
-                    </div>
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold text-lg mb-2 truncate">{equipment.title}</h3>
-                      <p className="text-gray-600 text-sm mb-3 line-clamp-2">{equipment.description}</p>
-                      <div className="flex justify-between items-center">
-                        <span className="text-green-600 font-bold">
-                          {equipment.daily_price.toLocaleString()} FCFA/jour
-                        </span>
-                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                          {equipment.status}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  />
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Package className="h-8 w-8 text-gray-400" />
+              /* État vide responsive */
+              <div className={`text-center ${isMobile ? 'py-8' : 'py-12'}`}>
+                <div className={`
+                  p-4 bg-gray-100 rounded-full mx-auto mb-4 flex items-center justify-center
+                  ${isMobile ? 'w-16 h-16' : 'w-20 h-20'}
+                `}>
+                  <Package className={`text-gray-400 ${isMobile ? 'h-8 w-8' : 'h-10 w-10'}`} />
                 </div>
-                <p className="text-lg font-medium mb-2">Aucun équipement trouvé</p>
-                <p className="text-sm text-gray-600 mb-6">Commencez par ajouter votre premier équipement</p>
+                
+                <h3 className={`font-semibold mb-2 ${isMobile ? 'text-lg' : 'text-xl'}`}>
+                  Aucun équipement trouvé
+                </h3>
+                
+                <p className={`
+                  text-gray-600 mb-6 max-w-md mx-auto
+                  ${isMobile ? 'text-sm px-4' : ''}
+                `}>
+                  Commencez par ajouter votre premier équipement
+                </p>
+                
                 <Button 
-                  onClick={handleOpenModal}
-                  className="bg-green-600 hover:bg-green-700"
+                  onClick={handleOpenModal} 
+                  size={isMobile ? "default" : "lg"} 
+                  className={`
+                    flex items-center gap-2 bg-green-600 hover:bg-green-700
+                    ${isMobile ? 'w-full max-w-xs mx-auto' : ''}
+                  `}
                 >
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="h-5 w-5" /> 
                   Ajouter mon premier équipement
                 </Button>
               </div>
@@ -137,12 +162,92 @@ const MyEquipments: React.FC = () => {
         </Card>
       </div>
 
-      {/* Modal d'ajout d'équipement */}
-      <AddEquipmentModal 
-        isOpen={isModalOpen} 
-        onClose={handleCloseModal} 
+      {/* Modal d'ajout */}
+      <AddEquipmentModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onSuccess={handleCloseModal}
       />
     </div>
+  );
+};
+
+// Composant Card d'équipement responsive
+interface EquipmentCardProps {
+  equipment: EquipmentData;
+  isMobile: boolean;
+  onClick: () => void;
+}
+
+const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment, isMobile, onClick }) => {
+  return (
+    <Card 
+      className={`
+        cursor-pointer hover:shadow-md transition-shadow
+        ${isMobile ? 'border-gray-200' : ''}
+      `}
+      onClick={onClick}
+    >
+      <CardContent className={`${isMobile ? 'p-4' : 'p-6'}`}>
+        {/* Image placeholder */}
+        <div className={`
+          bg-gray-200 rounded-lg mb-3 flex items-center justify-center
+          ${isMobile ? 'h-32' : 'h-40'}
+        `}>
+          <Package className="h-8 w-8 text-gray-400" />
+        </div>
+        
+        {/* Contenu */}
+        <div className="space-y-2">
+          <h3 className={`font-semibold line-clamp-2 ${isMobile ? 'text-sm' : 'text-base'}`}>
+            {equipment.title}
+          </h3>
+          
+          <p className={`text-gray-600 ${isMobile ? 'text-xs' : 'text-sm'}`}>
+            {equipment.location}
+          </p>
+          
+          <div className="flex items-center justify-between">
+            <span className={`font-bold text-green-600 ${isMobile ? 'text-sm' : 'text-base'}`}>
+              {equipment.daily_price.toLocaleString()} FCFA/jour
+            </span>
+            
+            {isMobile && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Menu d'actions
+                }}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          
+          {/* Badge d'état */}
+          <div className="flex justify-between items-center">
+            <span className={`
+              px-2 py-1 rounded-full text-xs font-medium
+              ${equipment.status === 'disponible' 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-gray-100 text-gray-800'
+              }
+            `}>
+              {equipment.status === 'disponible' ? 'Disponible' : 'Non disponible'}
+            </span>
+            
+            {equipment.condition && (
+              <span className={`text-xs text-gray-500 ${isMobile ? '' : 'ml-2'}`}>
+                État: {equipment.condition}
+              </span>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

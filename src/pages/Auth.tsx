@@ -20,7 +20,7 @@ export default function Auth() {
     // 3. Le chargement est terminé (loading = false)
     if (authCheckComplete && user && !loading) {
       console.log("👉 Utilisateur déjà connecté, redirection vers le tableau de bord...");
-      navigate('/dashboard', { replace: true });
+      navigate('/', { replace: true });
     }
   }, [user, loading, authCheckComplete, navigate]);
 
