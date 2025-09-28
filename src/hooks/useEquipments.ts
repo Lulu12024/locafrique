@@ -69,6 +69,32 @@ export function useEquipments() {
     return { valid: errors.length === 0, errors };
   };
 
+  // Fonction pour formater les données d'équipement
+  const formatEquipmentData = (data: AddEquipmentData, userId: string) => {
+    return {
+      title: data.title.trim(),
+      description: data.description.trim(),
+      daily_price: Number(data.daily_price),
+      deposit_amount: data.deposit_amount ? Number(data.deposit_amount) : 0,
+      category: data.category,
+      subcategory: data.subcategory?.trim() || null,
+      condition: data.condition || 'bon',
+      brand: data.brand?.trim() || null,
+      year: data.year ? Number(data.year) : null,
+      location: data.location?.trim() || '',
+      city: data.city?.trim() || 'Cotonou',
+      country: data.country?.trim() || 'Bénin',
+      status: 'en_attente', // ✅ CHANGEMENT ICI : statut en attente au lieu de disponible
+      moderation_status: 'pending', // ✅ NOUVEAU : statut de modération en attente
+      owner_id: userId,
+      is_premium: false, // Par défaut, les équipements ne sont pas premium
+      published_at: null, // Sera défini après approbation
+      approved_at: null, // Sera défini après approbation
+      rejected_at: null,
+      rejection_reason: null
+    };
+  };
+
   // Fonction pour normaliser les données avant insertion
   const normalizeEquipmentData = (data: AddEquipmentData, userId: string) => {
     return {
@@ -176,25 +202,25 @@ export function useEquipments() {
       }
 
       // Étape 3: Normalisation des données
-      const insertData = normalizeEquipmentData(equipmentData, user.id);
-      console.log("📦 Données normalisées pour insertion:", insertData);
+      // Étape 3: Formatage des données avec le nouveau statut
+      const formattedData = formatEquipmentData(equipmentData, sessionData.user.id);
+      console.log("📋 Données formatées:", formattedData);
 
       // Étape 4: Skip la vérification de profil pour éviter les erreurs TypeScript
       // La vérification de profil est optionnelle et peut être faite côté UI si nécessaire
       console.log("ℹ️ Vérification de profil sautée pour éviter les erreurs de types");
 
       // Étape 5: Insertion dans la base de données - VERSION SANS TYPES
-      const insertResponse = await supabase
+      const { data, error } = await supabase
         .from('equipments')
-        .insert(insertData)
-        .select('*')
+        .insert(formattedData)
+        .select()
         .single();
 
       // Vérification manuelle de la réponse
-      if (insertResponse.error) {
-        console.error("❌ Erreur lors de l'insertion:", insertResponse.error);
-        
-        const { message } = analyzeInsertError(insertResponse.error);
+      if (error) {
+        console.error("❌ Erreur d'insertion:", error);
+        const { message, solution } = analyzeInsertError(error);
         
         toast({
           title: "Erreur lors de l'ajout",
@@ -205,7 +231,8 @@ export function useEquipments() {
         throw new Error(message);
       }
 
-      const insertedData = insertResponse.data;
+      console.log("✅ Équipement créé avec succès:", data);
+      const insertedData = data;
 
       if (!insertedData) {
         console.error("❌ Aucune donnée retournée après insertion");
@@ -225,10 +252,10 @@ export function useEquipments() {
       
       toast({
         title: "🎉 Équipement ajouté avec succès !",
-        description: `"${insertedData.title}" - Catégorie: ${categoryName} - Prix: ${priceFormatted} FCFA/jour`,
+        description: `"${insertedData.title}" - Catégorie: ${categoryName} - Prix: ${priceFormatted} FCFA/jour. Vous recevrez une notification dès que votre équipement sera approuvé.`,
         duration: 5000,
       });
-
+      
       // Créer un objet EquipmentData compatible - CONSTRUCTION MANUELLE
       const finalEquipment: EquipmentData = {
         id: insertedData.id,
@@ -251,6 +278,8 @@ export function useEquipments() {
         images: [], // Tableau vide à la création
         booking_count: 0
       };
+
+      await notifyAdminNewEquipment(data.id, equipmentData.title, user.id);
 
       return finalEquipment;
 
@@ -287,6 +316,40 @@ export function useEquipments() {
     }
   }, [user]);
 
+
+  const notifyAdminNewEquipment = async (equipmentId: string, title: string, userId: string) => {
+    try {
+      // Créer une notification pour l'admin
+      const { error: notificationError } = await supabase
+        .from('admin_notifications')
+        .insert({
+          type: 'new_equipment_pending',
+          title: 'Nouvel équipement à valider',
+          message: `Un nouvel équipement "${title}" a été soumis et attend votre validation.`,
+          equipment_id: equipmentId,
+          user_id: userId,
+          status: 'unread',
+          priority: 'normal'
+        });
+
+      if (notificationError) {
+        console.warn("⚠️ Erreur lors de la notification admin:", notificationError);
+      } else {
+        console.log("✅ Notification admin créée avec succès");
+      }
+
+      // Envoyer un email à l'admin (optionnel)
+      // await sendEmailToAdmin({
+      //   subject: 'Nouvel équipement à valider - 3W-LOC',
+      //   equipmentTitle: title,
+      //   equipmentId: equipmentId
+      // });
+
+    } catch (error) {
+      console.warn("⚠️ Erreur lors de la notification admin:", error);
+    }
+  };
+
   // Fonction pour récupérer les équipements de l'utilisateur - VERSION SIMPLIFIÉE
   const fetchUserEquipments = useCallback(async (): Promise<EquipmentData[]> => {
     if (!user?.id) {
@@ -302,12 +365,35 @@ export function useEquipments() {
       // Requête simple sans jointures complexes
       const { data, error } = await supabase
         .from('equipments')
-        .select('*')
+        .select(`
+          id,
+          title,
+          description,
+          category,
+          subcategory,
+          daily_price,
+          deposit_amount,
+          condition,
+          brand,
+          year,
+          location,
+          city,
+          country,
+          status,
+          moderation_status,
+          is_premium,
+          published_at,
+          approved_at,
+          rejected_at,
+          rejection_reason,
+          created_at,
+          updated_at,
+          owner_id
+        `)
         .eq('owner_id', user.id)
         .order('created_at', { ascending: false });
-      
+
       if (error) {
-        console.error("❌ Erreur lors de la récupération des équipements:", error);
         throw error;
       }
       
@@ -362,6 +448,16 @@ export function useEquipments() {
     setIsLoading(true);
     
     try {
+
+      const updateData = {
+        ...equipmentData,
+        moderation_status: 'pending', // Remettre en attente de validation
+        status: 'en_attente',
+        approved_at: null,
+        published_at: null,
+        updated_at: new Date().toISOString()
+      };
+      
       const { error } = await supabase
         .from('equipments')
         .update(equipmentData)
