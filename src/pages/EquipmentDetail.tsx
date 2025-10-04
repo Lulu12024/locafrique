@@ -1,4 +1,4 @@
-// src/pages/EquipmentDetail.tsx - VERSION CORRIGÉE
+// src/pages/EquipmentDetail.tsx - VERSION FINALE CORRIGÉE
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,7 +14,6 @@ import {
   Package, 
   Clock, 
   CreditCard, 
-  ArrowRight, 
   Heart, 
   Share2, 
   ChevronLeft, 
@@ -22,14 +21,12 @@ import {
   ArrowLeft, 
   Loader2,
   MessageSquare,
-  Award,
   TrendingUp,
   Eye,
   Users,
   CheckCircle,
   Zap,
   Percent,
-  DollarSign,
   Camera,
   Hammer,
   Flower
@@ -43,18 +40,17 @@ import { useEquipmentReviews } from '@/hooks/useEquipmentReviews';
 import type { EquipmentReview } from '@/hooks/useEquipmentReviews';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-// Composant pour images avec fallback - SOLUTION PROBLÈME 2
 interface SafeImageProps {
   src?: string;
-  alt: string;
+  alt?: string;
   className?: string;
   fallbackSrc?: string;
-  category?: string; // Nouvelle prop pour personnaliser le fallback
+  category?: string;
 }
 
 const SafeImage: React.FC<SafeImageProps> = ({ 
   src, 
-  alt, 
+  alt = '', 
   className,
   fallbackSrc = '/api/placeholder/400/300',
   category 
@@ -64,7 +60,6 @@ const SafeImage: React.FC<SafeImageProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [showFallback, setShowFallback] = useState(!src);
 
-  // CORRECTION : Écouter les changements de src
   useEffect(() => {
     if (src) {
       setImageSrc(src);
@@ -90,10 +85,8 @@ const SafeImage: React.FC<SafeImageProps> = ({
     setIsLoading(false);
   };
 
-  // Icône selon la catégorie
   const getCategoryIcon = () => {
     const iconClass = "h-16 w-16 text-green-600";
-    
     switch(category?.toLowerCase()) {
       case 'electromenager':
       case 'électroménager':
@@ -118,9 +111,7 @@ const SafeImage: React.FC<SafeImageProps> = ({
           <p className="mt-3 text-sm font-medium text-green-700">
             {category || 'Équipement'}
           </p>
-          <p className="text-xs text-green-600 mt-1">
-            Image bientôt disponible
-          </p>
+          <p className="text-xs text-green-600 mt-1">Image bientôt disponible</p>
         </div>
       </div>
     );
@@ -137,7 +128,7 @@ const SafeImage: React.FC<SafeImageProps> = ({
         </div>
       )}
       <img
-        key={imageSrc} // Force le re-render quand l'image change
+        key={imageSrc}
         src={imageSrc}
         alt={alt}
         className={`w-full h-full object-cover transition-opacity duration-300 ${
@@ -155,7 +146,27 @@ const EquipmentDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isMobile = useIsMobile(); // DÉTECTION MOBILE
+  
+  // Détection mobile plus robuste
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 1024; // lg breakpoint
+      setIsMobile(mobile);
+      console.log('📱 Mobile détecté:', mobile, '- Largeur:', window.innerWidth);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  // Debug: vérifier la détection mobile
+  useEffect(() => {
+    console.log('🔍 isMobile:', isMobile);
+    console.log('📱 window.innerWidth:', window.innerWidth);
+  }, [isMobile]);
   
   const [equipment, setEquipment] = useState<EquipmentData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -168,7 +179,6 @@ const EquipmentDetail = () => {
   const [realEquipmentReviews, setRealEquipmentReviews] = useState<EquipmentReview[]>([]);
   const [realOwnerStats, setRealOwnerStats] = useState({ averageRating: 0, totalReviews: 0 });
 
-  // Données enrichies avec vraies valeurs
   const [equipmentStats, setEquipmentStats] = useState({
     totalBookings: 0,
     averageRating: 0,
@@ -177,7 +187,6 @@ const EquipmentDetail = () => {
     lastBookingDate: null as string | null
   });
 
-  // SOLUTION PROBLÈME 2 - Gestion sécurisée des images
   const getImages = () => {
     try {
       if (Array.isArray(equipment?.images) && equipment.images.length > 0) {
@@ -190,23 +199,17 @@ const EquipmentDetail = () => {
             return null;
           })
           .filter(Boolean);
-      }
-      else {
-        console.log("Aucune image trouvé")
-        return [ 'api/placeholder/800/600']
+      } else {
+        return ['/api/placeholder/800/600'];
       }
     } catch (error) {
-      console.error('Erreur lors du traitement des images:', error);
+      console.error('Erreur traitement images:', error);
     }
     return ['/api/placeholder/800/600'];
   };
 
   const allImages = getImages();
-  
-  // S'assurer que l'index des images est valide
-  const safeCurrentImageIndex = Math.min(Math.max(0, currentImageIndex), allImages.length - 1);
 
-  // Charger les données de l'équipement
   useEffect(() => {
     const fetchEquipment = async () => {
       if (!id) {
@@ -216,39 +219,53 @@ const EquipmentDetail = () => {
       }
 
       try {
-        console.log("🔍 Chargement de l'équipement ID:", id);
-        
-        // Charger l'équipement avec les données du propriétaire
+        // Charger l'équipement
         const { data: equipmentData, error: fetchError } = await supabase
           .from('equipments')
-          .select(`
-            *,
-            images:equipment_images(*),
-            owner:profiles!equipments_owner_id_fkey(*)
-          `)
+          .select('*')
           .eq('id', id)
           .single();
 
         if (fetchError) {
-          console.error("❌ Erreur lors du chargement:", fetchError);
-          if (fetchError.code === 'PGRST116') {
-            setError("Équipement non trouvé");
-          } else {
-            setError("Erreur lors du chargement de l'équipement");
-          }
+          console.error("❌ Erreur:", fetchError);
+          setError("Équipement non trouvé");
           setIsLoading(false);
           return;
         }
 
         console.log("✅ Équipement chargé:", equipmentData);
+
+        // Charger les images
+        const { data: imagesData } = await supabase
+          .from('equipment_images')
+          .select('*')
+          .eq('equipment_id', id);
+
+        equipmentData.images = imagesData || [];
+
+        // Charger le propriétaire avec owner_id
+        if (equipmentData.owner_id) {
+          console.log("👤 Chargement du propriétaire avec ID:", equipmentData.owner_id);
+          
+          const { data: ownerData, error: ownerError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', equipmentData.owner_id)
+            .maybeSingle(); // maybeSingle au lieu de single pour éviter l'erreur si pas trouvé
+
+          if (ownerError) {
+            console.error("❌ Erreur chargement propriétaire:", ownerError);
+          } else if (ownerData) {
+            console.log("✅ Propriétaire trouvé:", ownerData);
+            equipmentData.owner = ownerData;
+          } else {
+            console.warn("⚠️ Aucun profil trouvé pour cet owner_id");
+          }
+        }
+
         setEquipment(equipmentData);
-
-        // Charger les statistiques de l'équipement
         await loadEquipmentStats(id);
-        
-        // Incrémenter le compteur de vues
         await incrementViewCount(id);
-
       } catch (error) {
         console.error("❌ Erreur inattendue:", error);
         setError("Une erreur inattendue s'est produite");
@@ -260,21 +277,16 @@ const EquipmentDetail = () => {
     fetchEquipment();
   }, [id]);
 
-  // Charger les statistiques de l'équipement
   const loadEquipmentStats = async (equipmentId: string) => {
     try {
-      console.log("📊 Chargement des statistiques...");
-      
-      const { data: bookings, error: bookingsError } = await supabase
+      const { data: bookings } = await supabase
         .from('bookings')
         .select('id, created_at, status')
         .eq('equipment_id', equipmentId);
 
-      if (bookingsError) {
-        console.error("❌ Erreur lors du chargement des réservations:", bookingsError);
-      } else {
-        const totalBookings = bookings?.length || 0;
-        const lastBooking = bookings && bookings.length > 0 
+      if (bookings) {
+        const totalBookings = bookings.length;
+        const lastBooking = bookings.length > 0 
           ? bookings.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
           : null;
 
@@ -284,92 +296,53 @@ const EquipmentDetail = () => {
           lastBookingDate: lastBooking?.created_at || null,
           responseRate: 95
         }));
-
-        console.log("✅ Statistiques réservations chargées:", { totalBookings });
       }
 
-      try {
-        const reviews = await fetchEquipmentReviews(equipmentId);
-        setRealEquipmentReviews(reviews);
-        
-        if (reviews.length > 0) {
-          const avgRating = reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
-          setEquipmentStats(prev => ({
-            ...prev,
-            averageRating: Math.round(avgRating * 10) / 10,
-            reviewCount: reviews.length
-          }));
-          console.log("✅ Vraies évaluations équipement chargées:", { 
-            count: reviews.length, 
-            average: Math.round(avgRating * 10) / 10 
-          });
-        } else {
-          setEquipmentStats(prev => ({
-            ...prev,
-            averageRating: 0,
-            reviewCount: 0
-          }));
-          console.log("ℹ️ Aucune évaluation pour cet équipement");
-        }
-      } catch (reviewError) {
-        console.error("❌ Erreur lors du chargement des avis:", reviewError);
+      const reviews = await fetchEquipmentReviews(equipmentId);
+      setRealEquipmentReviews(reviews);
+      
+      if (reviews.length > 0) {
+        const avgRating = reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
         setEquipmentStats(prev => ({
           ...prev,
-          averageRating: 0,
-          reviewCount: 0
+          averageRating: Math.round(avgRating * 10) / 10,
+          reviewCount: reviews.length
         }));
       }
 
       if (equipment?.owner_id) {
-        try {
-          const ownerStatistics = await fetchOwnerStats(equipment.owner_id);
-          setRealOwnerStats(ownerStatistics);
-          console.log("✅ Stats propriétaire chargées:", ownerStatistics);
-        } catch (ownerError) {
-          console.error("❌ Erreur lors du chargement des stats propriétaire:", ownerError);
-        }
+        const ownerStatistics = await fetchOwnerStats(equipment.owner_id);
+        setRealOwnerStats(ownerStatistics);
       }
-
     } catch (error) {
-      console.error("❌ Erreur lors du chargement des statistiques:", error);
+      console.error("Erreur chargement stats:", error);
     }
   };
 
-  // Incrémenter le compteur de vues
   const incrementViewCount = async (equipmentId: string) => {
-    try {
-      setViewCount(Math.floor(Math.random() * 500) + 100);
-    } catch (error) {
-      console.error("❌ Erreur lors de l'incrémentation des vues:", error);
-    }
+    setViewCount(Math.floor(Math.random() * 500) + 100);
   };
 
   const handleReservationSuccess = () => {
     toast({
       title: "🎉 Réservation créée !",
-      description: "Votre demande de réservation a été envoyée avec succès. Commission de 5% appliquée automatiquement.",
+      description: "Votre demande a été envoyée. Commission de 5% appliquée.",
     });
-    
-    if (id) {
-      loadEquipmentStats(id);
-    }
+    if (id) loadEquipmentStats(id);
   };
 
   const handleToggleFavorite = async () => {
     if (!user) {
       toast({
         title: "Connexion requise",
-        description: "Veuillez vous connecter pour ajouter aux favoris.",
+        description: "Connectez-vous pour ajouter aux favoris.",
         variant: "destructive"
       });
       return;
     }
-
     setIsLiked(!isLiked);
-    
     toast({
-      title: isLiked ? "Retiré des favoris" : "Ajouté aux favoris",
-      description: isLiked ? "L'équipement a été retiré de vos favoris." : "L'équipement a été ajouté à vos favoris.",
+      title: isLiked ? "Retiré des favoris" : "Ajouté aux favoris"
     });
   };
 
@@ -378,34 +351,26 @@ const EquipmentDetail = () => {
       if (navigator.share) {
         await navigator.share({
           title: equipment?.title,
-          text: `Découvrez ${equipment?.title} sur notre plateforme`,
           url: window.location.href,
         });
       } else {
         await navigator.clipboard.writeText(window.location.href);
-        toast({
-          title: "Lien copié",
-          description: "Le lien de l'équipement a été copié dans le presse-papiers.",
-        });
+        toast({ title: "Lien copié" });
       }
     } catch (error) {
-      console.error("❌ Erreur lors du partage:", error);
+      console.error("Erreur partage:", error);
     }
   };
 
   const nextImage = () => {
     if (allImages.length > 1) {
-      const newIndex = (currentImageIndex + 1) % allImages.length;
-      console.log("🎯 Image suivante:", currentImageIndex, "->", newIndex);
-      setCurrentImageIndex(newIndex);
+      setCurrentImageIndex((currentImageIndex + 1) % allImages.length);
     }
   };
 
   const prevImage = () => {
     if (allImages.length > 1) {
-      const newIndex = (currentImageIndex - 1 + allImages.length) % allImages.length;
-      console.log("🎯 Image précédente:", currentImageIndex, "->", newIndex);
-      setCurrentImageIndex(newIndex);
+      setCurrentImageIndex((currentImageIndex - 1 + allImages.length) % allImages.length);
     }
   };
 
@@ -414,13 +379,13 @@ const EquipmentDetail = () => {
       navigate(`/owner/profile/${equipment.owner.id}`);
     }
   };
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('fr-FR').format(price);
   };
 
   const getAvailabilityBadge = () => {
     if (!equipment) return null;
-    
     if (equipment.status === 'disponible') {
       return (
         <Badge className="bg-green-100 text-green-800 border-green-200">
@@ -443,7 +408,7 @@ const EquipmentDetail = () => {
         <Card className="p-8">
           <div className="text-center">
             <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
-            <p className="text-gray-600">Chargement de l'équipement...</p>
+            <p className="text-gray-600">Chargement...</p>
           </div>
         </Card>
       </div>
@@ -470,28 +435,24 @@ const EquipmentDetail = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* SOLUTION PROBLÈME 1 - Header fixe avec flèche retour (remplace la barre mobile) */}
+      {/* Header fixe */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100">
-        <div className="flex items-center justify-between px-4 py-3 safe-area-inset-top">
-          {/* Bouton retour CORRIGÉ */}
+        <div className="flex items-center justify-between px-4 py-3">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
-              console.log("🔙 Bouton retour cliqué");
-              // Essayer différentes méthodes de navigation
               if (window.history.length > 1) {
                 navigate(-1);
               } else {
-                navigate('/search'); // Fallback vers la recherche
+                navigate('/search');
               }
             }}
-            className="flex items-center gap-2 hover:bg-gray-100 p-2 rounded-full"
+            className="p-2 rounded-full hover:bg-gray-100"
           >
             <ArrowLeft className="h-5 w-5 text-gray-700" />
           </Button>
 
-          {/* Actions à droite */}
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
@@ -501,7 +462,6 @@ const EquipmentDetail = () => {
             >
               <Share2 className="h-5 w-5 text-gray-700" />
             </Button>
-            
             <Button
               variant="ghost"
               size="sm"
@@ -514,115 +474,175 @@ const EquipmentDetail = () => {
         </div>
       </div>
 
-      {/* SOLUTION PROBLÈME 3 - Contenu principal avec padding pour header fixe ET plus d'espace en bas */}
-      <div className="pt-16 pb-32"> {/* Augmenté pb-32 pour plus d'espace en bas */}
+      {/* Contenu principal */}
+      <div className="pt-16 pb-32">
         <div className={`max-w-7xl mx-auto ${isMobile ? 'px-4 py-4' : 'px-6 py-6'}`}>
-          <div className={`grid grid-cols-1 ${isMobile ? 'gap-6 pb-20' : 'lg:grid-cols-3 gap-6 lg:gap-8'}`}> {/* Ajouté pb-20 sur mobile */}
-            
-            {/* Colonne principale - Images et détails */}
-            <div className={`${isMobile ? 'space-y-6' : 'lg:col-span-2 space-y-6'}`}>
-              
-              {/* SOLUTION PROBLÈME 2 - Galerie d'images avec SafeImage */}
-              <Card className="overflow-hidden">
-                <div className="relative">
-                  <div className={`${isMobile ? 'aspect-[4/3]' : 'aspect-video'} bg-gray-200 relative overflow-hidden`}>
-                    <SafeImage
-                      src={allImages[currentImageIndex]}
-                      // alt={equipment.title}
-                      className="w-full h-full"
-                    />
-                    
-                    {/* Contrôles de navigation des images */}
-                    {allImages.length > 1 && (
-                      <>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white"
-                          onClick={prevImage}
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white"
-                          onClick={nextImage}
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                    
-                    {/* Badges sur l'image */}
-                    <div className="absolute top-4 left-4 space-y-2">
-                      {getAvailabilityBadge()}
-                      <Badge className="bg-blue-100 text-blue-800 border-blue-200 block">
-                        <Zap className="h-3 w-3 mr-1" />
-                        Réservation instantanée
-                      </Badge>
-                    </div>
-                    
-                    {/* Actions sur l'image - SUPPRESSION DU TÉLÉPHONE */}
-                    <div className="absolute top-4 right-4 space-y-2 hidden lg:flex lg:flex-col">
+          
+          {/* GALERIE D'IMAGES - PLEINE LARGEUR EN HAUT */}
+          {isMobile ? (
+            /* MOBILE - Carrousel */
+            <Card className="overflow-hidden mb-6">
+              <div className="relative">
+                <div className="aspect-[4/3] bg-gray-200 relative overflow-hidden">
+                  <SafeImage
+                    src={allImages[currentImageIndex]}
+                    className="w-full h-full"
+                    category={equipment.category}
+                  />
+                  
+                  {allImages.length > 1 && (
+                    <>
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={handleToggleFavorite}
-                        className="bg-white/90 hover:bg-white"
+                        className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white/90"
+                        onClick={prevImage}
                       >
-                        <Heart className={`h-4 w-4 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
+                        <ChevronLeft className="h-4 w-4" />
                       </Button>
-                      <Button variant="secondary" size="sm" onClick={handleShare} className="bg-white/90 hover:bg-white">
-                        <Share2 className="h-4 w-4" />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white/90"
+                        onClick={nextImage}
+                      >
+                        <ChevronRight className="h-4 w-4" />
                       </Button>
-                    </div>
-                    
-                    {/* Compteur de vues */}
-                    <div className="absolute bottom-4 left-4">
-                      <Badge variant="outline" className="bg-white/90">
-                        <Eye className="h-3 w-3 mr-1" />
-                        {viewCount} vues cette semaine
-                      </Badge>
-                    </div>
-
-                    {/* Indicateur d'images CORRIGÉ */}
-                    {allImages.length > 1 && (
-                      <div className="absolute bottom-4 right-4">
-                        <Badge variant="outline" className="bg-white/90">
-                          {currentImageIndex + 1} / {allImages.length}
-                        </Badge>
-                      </div>
-                    )}
+                    </>
+                  )}
+                  
+                  <div className="absolute top-4 left-4 space-y-2">
+                    {getAvailabilityBadge()}
+                    <Badge className="bg-blue-100 text-blue-800 border-blue-200 block">
+                      <Zap className="h-3 w-3 mr-1" />
+                      Réservation instantanée
+                    </Badge>
                   </div>
                   
-                  {/* Miniatures - responsive */}
+                  <div className="absolute bottom-4 left-4">
+                    <Badge variant="outline" className="bg-white/90">
+                      <Eye className="h-3 w-3 mr-1" />
+                      {viewCount} vues
+                    </Badge>
+                  </div>
+
                   {allImages.length > 1 && (
-                    <div className={`${isMobile ? 'p-3' : 'p-4'}`}>
-                      <div className="flex space-x-2 overflow-x-auto">
-                        {allImages.map((image: any, index: number) => (
-                          <button
-                            key={index}
-                            onClick={() => setCurrentImageIndex(index)}
-                            className={`flex-shrink-0 ${isMobile ? 'w-16 h-12' : 'w-20 h-16'} rounded border-2 overflow-hidden transition-all ${
-                              currentImageIndex === index ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            <SafeImage 
-                              src={image} 
-                              alt={`Vue ${index + 1}`} 
-                              className="w-full h-full"
-                            />
-                          </button>
-                        ))}
-                      </div>
+                    <div className="absolute bottom-4 right-4">
+                      <Badge variant="outline" className="bg-white/90">
+                        {currentImageIndex + 1} / {allImages.length}
+                      </Badge>
                     </div>
                   )}
                 </div>
-              </Card>
+                
+                {allImages.length > 1 && (
+                  <div className="p-3">
+                    <div className="flex space-x-2 overflow-x-auto">
+                      {allImages.map((image: any, index: number) => (
+                        <button
+                          key={index}
+                          onClick={() => setCurrentImageIndex(index)}
+                          className={`flex-shrink-0 w-16 h-12 rounded border-2 overflow-hidden ${
+                            currentImageIndex === index ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
+                          }`}
+                        >
+                          <SafeImage 
+                            src={image} 
+                            className="w-full h-full"
+                            category={equipment.category}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          ) : (
+            /* DESKTOP - Grille Airbnb PLEINE LARGEUR */
+            <div className="relative grid grid-cols-4 grid-rows-2 gap-2 h-[480px] rounded-xl overflow-hidden mb-8">
+              <button 
+                onClick={() => setCurrentImageIndex(0)}
+                className="col-span-2 row-span-2 relative group cursor-pointer overflow-hidden"
+              >
+                <SafeImage
+                  src={allImages[0]}
+                  alt={equipment.title}
+                  className="w-full h-full object-cover"
+                  category={equipment.category}
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                
+                <div className="absolute top-4 left-4 space-y-2">
+                  {getAvailabilityBadge()}
+                  <Badge className="bg-blue-100 text-blue-800 border-blue-200 block">
+                    <Zap className="h-3 w-3 mr-1" />
+                    Réservation instantanée
+                  </Badge>
+                </div>
+                
+                <div className="absolute bottom-4 left-4">
+                  <Badge variant="outline" className="bg-white/90">
+                    <Eye className="h-3 w-3 mr-1" />
+                    {viewCount} vues
+                  </Badge>
+                </div>
+              </button>
+              
+              {[1, 2, 3, 4].map((index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentImageIndex(index)}
+                  className="relative group cursor-pointer overflow-hidden row-span-1"
+                >
+                  <SafeImage
+                    src={allImages[index] || allImages[0]}
+                    alt={`Vue ${index + 1}`}
+                    className="w-full h-full object-cover"
+                    category={equipment.category}
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                  
+                  {index === 4 && allImages.length > 5 && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <div className="text-white text-sm font-semibold flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/30">
+                        <Camera className="h-4 w-4" />
+                        <span>Afficher toutes les photos</span>
+                      </div>
+                    </div>
+                  )}
+                </button>
+              ))}
+              
+              <div className="absolute top-4 right-4 flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleShare}
+                  className="bg-white/90 hover:bg-white shadow-md"
+                >
+                  <Share2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleToggleFavorite}
+                  className="bg-white/90 hover:bg-white shadow-md"
+                >
+                  <Heart className={`h-4 w-4 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
+                </Button>
+              </div>
+            </div>
+          )}
 
-              {/* SOLUTION PROBLÈME 3 - Titre et informations principales responsive */}
-              <div className="space-y-4">
+          {/* CONTENU + SIDEBAR EN DESSOUS DES IMAGES */}
+          <div className={`grid grid-cols-1 ${isMobile ? 'gap-6 pb-20' : 'lg:grid-cols-3 gap-6 lg:gap-8'}`}>
+            
+            {/* Colonne principale - Détails */}
+            <div className={`${isMobile ? 'space-y-6' : 'lg:col-span-2 space-y-8'}`}>
+
+              {/* Titre */}
+              <div className={`${isMobile ? 'space-y-4' : 'space-y-6'}`}>
                 <div className={`flex items-center space-x-2 text-sm text-gray-600 ${isMobile ? 'flex-wrap' : ''}`}>
                   <span>{equipment.category}</span>
                   <span>•</span>
@@ -634,11 +654,11 @@ const EquipmentDetail = () => {
                   </span>
                 </div>
                 
-                <h1 className={`${isMobile ? 'text-2xl' : 'text-2xl lg:text-3xl'} font-bold text-gray-900 leading-tight break-words`}>
+                <h1 className={`${isMobile ? 'text-2xl' : 'text-3xl lg:text-4xl'} font-bold text-gray-900 leading-tight`}>
                   {equipment.title}
                 </h1>
                 
-                <div className={`flex items-center ${isMobile ? 'flex-wrap gap-2' : 'space-x-6'} mb-6`}>
+                <div className={`flex items-center ${isMobile ? 'flex-wrap gap-2' : 'space-x-6'}`}>
                   <div className="flex items-center">
                     <Star className="h-5 w-5 text-yellow-500 fill-current" />
                     <span className="ml-1 font-medium">
@@ -654,98 +674,157 @@ const EquipmentDetail = () => {
                   </div>
                   <div className="flex items-center text-green-600">
                     <TrendingUp className="h-5 w-5 mr-1" />
-                    <span>96% de satisfaction</span>
+                    <span>96% satisfaction</span>
                   </div>
                 </div>
               </div>
 
-              {/* Description responsive */}
+              {/* Description */}
               <Card>
-                <CardContent className={`${isMobile ? 'p-4' : 'p-6'}`}>
-                  <h3 className="text-lg font-semibold mb-4">Description</h3>
-                  <p className="text-gray-700 leading-relaxed mb-4 break-words">
-                    {equipment.description || 'Équipement professionnel de qualité, parfait pour vos projets. Matériel bien entretenu et régulièrement vérifié pour assurer votre sécurité et l\'efficacité de vos travaux.'}
-                  </p>
-                  
-                  {/* Caractéristiques principales responsive */}
-                  <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2 md:grid-cols-3'} gap-4`}>
-                    <div className="flex items-center text-sm">
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                      <span>Équipement vérifié</span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                      <span>Assurance incluse</span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                      <span>Support technique</span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                      <span>Livraison possible</span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                      <span>Formation incluse</span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                      <span>Maintenance récente</span>
-                    </div>
-                  </div>
+                <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
+                  {isMobile ? (
+                    <>
+                      <h3 className="text-lg font-semibold mb-4">Description</h3>
+                      <p className="text-gray-700 leading-relaxed mb-4">
+                        {equipment.description || 'Équipement professionnel de qualité.'}
+                      </p>
+                      
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="flex items-center text-sm">
+                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                          <span>Équipement vérifié</span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                          <span>Assurance incluse</span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                          <span>Support technique</span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                          <span>Livraison possible</span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                          <span>Formation incluse</span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                          <span>Maintenance récente</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-6">
+                        <div>
+                          <h3 className="text-xl font-semibold mb-4">À propos de cet équipement</h3>
+                          <p className="text-gray-700 text-base leading-relaxed">
+                            {equipment.description || 'Équipement professionnel de qualité supérieure, idéal pour vos projets. Matériel régulièrement entretenu et vérifié.'}
+                          </p>
+                        </div>
+
+                        <Separator />
+
+                        <div>
+                          <h3 className="text-xl font-semibold mb-6">Ce que propose cet équipement</h3>
+                          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                            <div className="flex items-center">
+                              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                              <span className="text-gray-700">Équipement vérifié</span>
+                            </div>
+                            <div className="flex items-center">
+                              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                              <span className="text-gray-700">Assurance incluse</span>
+                            </div>
+                            <div className="flex items-center">
+                              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                              <span className="text-gray-700">Support technique</span>
+                            </div>
+                            <div className="flex items-center">
+                              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                              <span className="text-gray-700">Livraison possible</span>
+                            </div>
+                            <div className="flex items-center">
+                              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                              <span className="text-gray-700">Formation incluse</span>
+                            </div>
+                            <div className="flex items-center">
+                              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                              <span className="text-gray-700">Maintenance récente</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
-              {/* Propriétaire responsive - MODERNISÉ SANS TÉLÉPHONE */}
+              {/* Propriétaire */}
               <Card>
-                <CardContent className={`${isMobile ? 'p-4' : 'p-6'}`}>
-                  <h3 className="text-lg font-semibold mb-4">Propriétaire</h3>
+                <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
+                  <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>Propriétaire</h3>
                   
-                  {/* Layout responsive : vertical sur très petits écrans */}
                   <div className={`${isMobile ? 'space-y-3' : 'flex items-center justify-between'}`}>
-                    {/* Section propriétaire cliquable */}
                     <button 
-                      onClick={handleOwnerClick}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const ownerId = equipment?.owner?.id || equipment?.owner_id;
+                        console.log('🔍 Clic propriétaire');
+                        console.log('   - equipment.owner?.id:', equipment?.owner?.id);
+                        console.log('   - equipment.owner_id:', equipment?.owner_id);
+                        console.log('   - ID utilisé:', ownerId);
+                        
+                        if (ownerId) {
+                          navigate(`/owner/profile/${ownerId}`);
+                        } else {
+                          console.error('❌ Aucun ID propriétaire trouvé');
+                          toast({
+                            title: "Erreur",
+                            description: "Impossible de charger le profil du propriétaire",
+                            variant: "destructive"
+                          });
+                        }
+                      }}
                       className={`flex items-center space-x-3 ${isMobile ? 'w-full' : 'flex-1'} text-left hover:bg-gray-50 rounded-lg p-2 transition-colors group`}
                     >
-                      {/* Avatar cliquable */}
-                      <Avatar className={`${isMobile ? 'w-12 h-12' : 'w-14 h-14'} flex-shrink-0`}>
-                        <AvatarImage src={equipment.owner?.avatar_url} />
-                        <AvatarFallback className="bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold">
-                          {equipment.owner?.first_name?.[0]}{equipment.owner?.last_name?.[0]}
+                      <Avatar className={`${isMobile ? 'w-12 h-12' : 'w-16 h-16'}`}>
+                        <AvatarImage src={equipment?.owner?.avatar_url} />
+                        <AvatarFallback className="bg-gradient-to-r from-green-500 to-green-600 text-white">
+                          {equipment?.owner?.first_name?.[0] || 'P'}{equipment?.owner?.last_name?.[0] || 'P'}
                         </AvatarFallback>
                       </Avatar>
                       
-                      {/* Informations propriétaire */}
-                      <div className="flex-1 min-w-0">
-                        {/* Nom + icône vérifiée */}
+                      <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-1">
-                          <h4 className={`font-semibold ${isMobile ? 'text-base' : 'text-lg'} text-gray-900 group-hover:text-green-600 transition-colors truncate`}>
-                            {equipment.owner?.first_name} {equipment.owner?.last_name}
+                          <h4 className={`font-semibold ${isMobile ? 'text-base' : 'text-lg'} text-gray-900`}>
+                            {equipment?.owner?.first_name && equipment?.owner?.last_name 
+                              ? `${equipment.owner.first_name} ${equipment.owner.last_name}`
+                              : 'Propriétaire'
+                            }
                           </h4>
-                          <div className="flex items-center justify-center w-5 h-5 bg-green-500 rounded-full flex-shrink-0">
+                          <div className="flex items-center justify-center w-5 h-5 bg-green-500 rounded-full">
                             <Shield className="h-3 w-3 text-white" />
                           </div>
                         </div>
                         
-                        {/* Étoiles et évaluations - Layout amélioré pour mobile */}
                         <div className="flex items-center space-x-1">
-                          <div className="flex items-center">
+                          <div className="flex">
                             {[1, 2, 3, 4, 5].map((star) => (
                               <Star
                                 key={star}
                                 className={`h-4 w-4 ${
                                   star <= Math.floor(realOwnerStats.averageRating)
                                     ? 'text-yellow-400 fill-yellow-400'
-                                    : star <= realOwnerStats.averageRating
-                                    ? 'text-yellow-400 fill-yellow-400'
                                     : 'text-gray-300'
                                 }`}
                               />
                             ))}
                           </div>
-                          <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-medium text-gray-900 ml-1 truncate`}>
+                          <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-medium text-gray-900 ml-1`}>
                             {realOwnerStats.totalReviews > 0 
                               ? `${realOwnerStats.averageRating} (${realOwnerStats.totalReviews} avis)` 
                               : 'Nouveau propriétaire'
@@ -755,14 +834,13 @@ const EquipmentDetail = () => {
                       </div>
                     </button>
                     
-                    {/* Bouton contacter - Adaptatif selon la taille */}
                     <Button 
                       variant="outline" 
-                      className={`flex items-center ${
+                      className={`${
                         isMobile 
-                          ? 'w-full justify-center py-3 text-sm' 
+                          ? 'w-full py-3' 
                           : 'ml-3 px-6 py-3'
-                      } border-green-200 text-green-700 hover:bg-green-50 hover:border-green-300 transition-colors font-medium`}
+                      } border-green-200 text-green-700 hover:bg-green-50`}
                     >
                       <MessageSquare className="h-4 w-4 mr-2" />
                       Contacter
@@ -771,163 +849,214 @@ const EquipmentDetail = () => {
                 </CardContent>
               </Card>
 
-              {/* Avis récents responsive */}
+              {/* Avis */}
               <Card>
-                <CardContent className={`${isMobile ? 'p-4' : 'p-6'}`}>
-                  <h3 className="text-lg font-semibold mb-4">Dernières évaluations</h3>
-                  <div className="space-y-4">
-                    {realEquipmentReviews.length === 0 ? (
-                      <div className="text-center py-8">
-                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Star className="h-8 w-8 text-gray-400" />
-                        </div>
-                        <p className="text-gray-600 mb-2">Aucune évaluation pour le moment</p>
-                        <p className="text-sm text-gray-500">
-                          Soyez le premier à laisser un avis après avoir loué cet équipement !
-                        </p>
+                <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
+                  <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>Avis des clients</h3>
+                  {realEquipmentReviews.length === 0 ? (
+                    <div className={`text-center ${isMobile ? 'py-8' : 'py-12'}`}>
+                      <div className={`${isMobile ? 'w-16 h-16' : 'w-20 h-20'} bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4`}>
+                        <Star className={`${isMobile ? 'h-8 w-8' : 'h-10 w-10'} text-gray-400`} />
                       </div>
-                    ) : (
-                      realEquipmentReviews.slice(0, 3).map((review) => (
-                        <div key={review.id} className="flex items-start justify-between border-b pb-3 last:border-b-0">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-2 flex-wrap">
-                              <span className="font-medium">
-                                {review.reviewer?.first_name} {review.reviewer?.last_name?.[0]}.
-                              </span>
-                              <div className="flex">
-                                {Array.from({ length: review.rating }, (_, i) => (
-                                  <Star key={i} className="h-4 w-4 text-yellow-500 fill-current" />
-                                ))}
-                              </div>
+                      <p className="text-gray-600 mb-2">Aucune évaluation</p>
+                      <p className="text-sm text-gray-500">
+                        Soyez le premier à laisser un avis !
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {realEquipmentReviews.slice(0, 3).map((review) => (
+                        <div key={review.id} className="border-b pb-4 last:border-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-medium">
+                              {review.reviewer?.first_name} {review.reviewer?.last_name?.[0]}.
+                            </span>
+                            <div className="flex">
+                              {Array.from({ length: review.rating }, (_, i) => (
+                                <Star key={i} className="h-4 w-4 text-yellow-500 fill-current" />
+                              ))}
                             </div>
-                            {review.comment && (
-                              <p className="text-sm text-gray-600 mt-1 break-words">{review.comment}</p>
-                            )}
-                            <p className="text-xs text-gray-500 mt-1">
-                              {new Date(review.created_at).toLocaleDateString('fr-FR')}
-                            </p>
                           </div>
+                          {review.comment && (
+                            <p className="text-gray-600 text-sm">{review.comment}</p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-2">
+                            {new Date(review.created_at).toLocaleDateString('fr-FR', { 
+                              year: 'numeric', month: 'long', day: 'numeric' 
+                            })}
+                          </p>
                         </div>
-                      ))
-                    )}
-                  </div>
-                  {realEquipmentReviews.length > 0 && (
-                    <Button variant="outline" className="w-full mt-4">
-                      <Eye className="h-4 w-4 mr-2" />
-                      Voir tous les avis ({realEquipmentReviews.length})
-                    </Button>
+                      ))}
+                      <Button variant="outline" className="w-full">
+                        Voir tous les avis ({realEquipmentReviews.length})
+                      </Button>
+                    </div>
                   )}
                 </CardContent>
               </Card>
             </div>
 
-            {/* Colonne latérale - Réservation responsive */}
-            <div className={`${isMobile ? 'space-y-6' : 'space-y-6'}`}>
-              {/* Card de réservation modernisée */}
-              <Card className={`${isMobile ? 'border-2 border-blue-200 shadow-xl' : 'sticky top-6 border-2 border-blue-200 shadow-xl'}`}>
+            {/* Sidebar réservation */}
+            <div className="space-y-6">
+              <Card className={`${isMobile ? 'border-2 border-blue-200 shadow-xl' : 'sticky top-24 border border-gray-200 shadow-lg'}`}>
                 <CardContent className={`${isMobile ? 'p-4' : 'p-6'}`}>
-                  {/* Prix principal avec commission visible */}
-                  <div className="text-center mb-6">
-                    <div className={`${isMobile ? 'text-2xl' : 'text-3xl'} font-bold text-green-600`}>
-                      {formatPrice(equipment.daily_price)} FCFA
-                    </div>
-                    <div className="text-gray-600">par jour</div>
-                    
-                    {/* Information sur la commission */}
-                    <div className="mt-2 p-2 bg-orange-50 rounded-lg">
-                      <div className="flex items-center justify-center text-orange-700 text-sm">
-                        <Percent className="h-4 w-4 mr-1" />
-                        Commission automatique: 5% fixe
+                  {isMobile ? (
+                    <>
+                      <div className="text-center mb-6">
+                        <div className="text-2xl font-bold text-green-600">
+                          {formatPrice(equipment.daily_price)} FCFA
+                        </div>
+                        <div className="text-gray-600">par jour</div>
+                        
+                        <div className="mt-2 p-2 bg-orange-50 rounded-lg">
+                          <div className="flex items-center justify-center text-orange-700 text-sm">
+                            <Percent className="h-4 w-4 mr-1" />
+                            Commission: 5% fixe
+                          </div>
+                        </div>
+                        
+                        <div className="mt-4 space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span>Semaine (7j):</span>
+                            <span className="font-medium">{formatPrice(equipment.daily_price * 7 * 0.93)} FCFA</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Mois (30j):</span>
+                            <span className="font-medium">{formatPrice(equipment.daily_price * 30 * 0.85)} FCFA</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    
-                    {/* Prix dégressifs */}
-                    <div className="mt-4 space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>Semaine (7j):</span>
-                        <span className="font-medium">{formatPrice(equipment.daily_price * 7 * 0.93)} FCFA</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Mois (30j):</span>
-                        <span className="font-medium">{formatPrice(equipment.daily_price * 30 * 0.85)} FCFA</span>
-                      </div>
-                    </div>
-                  </div>
 
-                  <Separator className="my-6" />
+                      <Separator className="my-6" />
 
-                  {/* Informations sur la caution */}
-                  <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <Shield className="h-5 w-5 text-green-600 mr-2" />
-                        <span className="font-medium">Caution</span>
+                      <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <Shield className="h-5 w-5 text-green-600 mr-2" />
+                            <span className="font-medium">Caution</span>
+                          </div>
+                          <span className="font-semibold">{formatPrice(equipment.deposit_amount || 0)} FCFA</span>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-1">Remboursable sous 48h</p>
                       </div>
-                      <span className="font-semibold">{formatPrice(equipment.deposit_amount || 0)} FCFA</span>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">Remboursable sous 48h</p>
-                  </div>
 
-                  {/* BOUTON DE RÉSERVATION MODERNISÉ - MASQUÉ SUR MOBILE SI BARRE FIXE */}
-                  {!isMobile && (
-                    <Button 
-                      onClick={() => {
-                        if (!user) {
-                          toast({
-                            title: "Connexion requise",
-                            description: "Veuillez vous connecter pour faire une réservation.",
-                            variant: "destructive"
-                          });
-                          navigate('/auth');
-                          return;
-                        }
-                        setShowReservationModal(true);
-                      }}
-                      className={`w-full ${isMobile ? 'h-12' : 'h-12'} text-lg font-semibold bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 shadow-lg`}
-                      disabled={equipment.status !== 'disponible'}
-                    >
-                      <Calendar className="h-5 w-5 mr-2" />
-                      {equipment.status === 'disponible' ? 'Réserver maintenant' : 'Indisponible'}
-                    </Button>
+                      <div className="text-center text-sm text-gray-600 space-y-1">
+                        <p>Réservation instantanée • Commission 5%</p>
+                        <p>Annulation gratuite 24h avant</p>
+                      </div>
+
+                      <Separator className="my-6" />
+
+                      <div className="space-y-3">
+                        <div className="flex items-center text-sm">
+                          <Shield className="h-4 w-4 text-green-600 mr-2" />
+                          <span>Vérifié et assuré</span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                          <Clock className="h-4 w-4 text-green-600 mr-2" />
+                          <span>Disponibilité temps réel</span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                          <CreditCard className="h-4 w-4 text-green-600 mr-2" />
+                          <span>Paiement sécurisé</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="mb-6">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl font-semibold text-gray-900">
+                            {formatPrice(equipment.daily_price)} FCFA
+                          </span>
+                          <span className="text-gray-600">par jour</span>
+                        </div>
+                        
+                        {equipmentStats.reviewCount > 0 && (
+                          <div className="flex items-center gap-1 mt-2 text-sm">
+                            <Star className="h-4 w-4 text-gray-900 fill-current" />
+                            <span className="font-semibold">{equipmentStats.averageRating}</span>
+                            <span className="text-gray-600">· {equipmentStats.reviewCount} avis</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <Separator className="my-5" />
+
+                      <div className="space-y-3 mb-5">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-700">Tarif semaine (7j)</span>
+                          <span className="font-medium">{formatPrice(equipment.daily_price * 7 * 0.93)} FCFA</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-700">Tarif mois (30j)</span>
+                          <span className="font-medium">{formatPrice(equipment.daily_price * 30 * 0.85)} FCFA</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-gray-600">
+                          <span>Commission de service</span>
+                          <span>5%</span>
+                        </div>
+                      </div>
+
+                      <Separator className="my-5" />
+
+                      <div className="flex justify-between items-center mb-6">
+                        <div>
+                          <div className="font-medium">Caution</div>
+                          <div className="text-sm text-gray-600">Remboursable sous 48h</div>
+                        </div>
+                        <span className="font-semibold">{formatPrice(equipment.deposit_amount || 0)} FCFA</span>
+                      </div>
+
+                      <Button 
+                        onClick={() => {
+                          if (!user) {
+                            toast({
+                              title: "Connexion requise",
+                              variant: "destructive"
+                            });
+                            navigate('/auth');
+                            return;
+                          }
+                          setShowReservationModal(true);
+                        }}
+                        className="w-full h-12 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
+                        disabled={equipment.status !== 'disponible'}
+                      >
+                        <Calendar className="h-5 w-5 mr-2" />
+                        {equipment.status === 'disponible' ? 'Réserver' : 'Indisponible'}
+                      </Button>
+
+                      <p className="text-center text-sm text-gray-600 mt-4">
+                        Vous ne serez pas encore débité
+                      </p>
+
+                      <Separator className="my-6" />
+
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 text-sm text-gray-700">
+                          <Shield className="h-5 w-5 text-gray-400" />
+                          <span>Vérifié et assuré</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-gray-700">
+                          <Clock className="h-5 w-5 text-gray-400" />
+                          <span>Réservation instantanée</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-gray-700">
+                          <CreditCard className="h-5 w-5 text-gray-400" />
+                          <span>Paiement sécurisé</span>
+                        </div>
+                      </div>
+                    </>
                   )}
-                  
-                  {/* MESSAGE POUR MOBILE - RÉFÉRENCE À LA BARRE DU BAS */}
-                  
-
-                  <div className="text-center text-sm text-gray-600 space-y-1 mt-4">
-                    <p>Réservation instantanée • Commission 5% automatique</p>
-                    <p>Annulation gratuite 24h avant</p>
-                  </div>
-
-                  <Separator className="my-6" />
-
-                  {/* Garanties */}
-                  <div className="space-y-3">
-                    <div className="flex items-center text-sm">
-                      <Shield className="h-4 w-4 text-green-600 mr-2" />
-                      <span>Équipement vérifié et assuré</span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <Clock className="h-4 w-4 text-green-600 mr-2" />
-                      <span>Disponibilité en temps réel</span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <CreditCard className="h-4 w-4 text-green-600 mr-2" />
-                      <span>Paiement sécurisé</span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <Zap className="h-4 w-4 text-green-600 mr-2" />
-                      <span>Validation automatique</span>
-                    </div>
-                  </div>
                 </CardContent>
               </Card>
 
-              {/* Statistiques de l'équipement */}
+              {/* Statistiques */}
               <Card>
-                <CardContent className={`${isMobile ? 'p-4' : 'p-6'}`}>
-                  <h4 className="font-semibold mb-4">Statistiques</h4>
-                  <div className="space-y-3">
+                <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
+                  <h4 className={`font-semibold mb-${isMobile ? '4' : '6'} ${!isMobile && 'text-lg'}`}>Statistiques</h4>
+                  <div className={`space-y-${isMobile ? '3' : '4'}`}>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Total réservations</span>
                       <span className="font-medium">{equipmentStats.totalBookings}</span>
@@ -956,38 +1085,35 @@ const EquipmentDetail = () => {
         </div>
       </div>
 
-              {/* SOLUTION PROBLÈME 4 - Bouton de réservation fixe style Airbnb (mobile uniquement) CORRIGÉ */}
+      {/* Barre fixe mobile */}
       {isMobile && (
         <div className="fixed bottom-0 left-0 right-0 z-50">
-          <div className="bg-white border-t border-gray-200 shadow-2xl">
+          <div className="bg-white border-t shadow-2xl">
             <div className="flex justify-center py-1">
               <div className="w-8 h-1 bg-gray-300 rounded-full opacity-40" />
             </div>
             
-            <div className="px-4 pb-4 pt-2 safe-area-inset-bottom">
+            <div className="px-4 pb-4 pt-2">
               <div className="flex items-center justify-between">
-                {/* Section prix et informations CORRIGÉES */}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1">
                   <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-xl font-bold text-gray-900 tracking-tight">
+                    <span className="text-xl font-bold text-gray-900">
                       {formatPrice(equipment.daily_price)} FCFA
                     </span>
-                    <span className="text-gray-600 text-sm font-medium">par jour</span>
+                    <span className="text-gray-600 text-sm">par jour</span>
                   </div>
                   
                   <div className="flex items-center text-sm text-gray-600">
-                    <Calendar className="h-3 w-3 mr-1.5 flex-shrink-0" />
+                    <Calendar className="h-3 w-3 mr-1.5" />
                     <span>Disponible</span>
                   </div>
                 </div>
                 
-                {/* Bouton réserver MÊME COULEUR que le bouton principal */}
                 <Button 
                   onClick={() => {
                     if (!user) {
                       toast({
                         title: "Connexion requise",
-                        description: "Veuillez vous connecter pour faire une réservation.",
                         variant: "destructive"
                       });
                       navigate('/auth');
@@ -995,22 +1121,18 @@ const EquipmentDetail = () => {
                     }
                     setShowReservationModal(true);
                   }}
-                  className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 ml-4 rounded-lg px-8 py-3 text-base min-w-[120px] disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed"
+                  className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 ml-4 rounded-lg px-8 py-3"
                   disabled={equipment.status !== 'disponible'}
-                  size="lg"
                 >
                   Réserver
                 </Button>
               </div>
-              
-              {/* Informations supplémentaires CORRIGÉES */}
-              
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de réservation */}
+      {/* Modal réservation */}
       {showReservationModal && equipment && (
         <ReservationModal
           isOpen={showReservationModal}
