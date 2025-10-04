@@ -249,17 +249,34 @@ const EquipmentDetail = () => {
           
           const { data: ownerData, error: ownerError } = await supabase
             .from('profiles')
-            .select('*')
+            .select('id, first_name, last_name, avatar_url, created_at')
             .eq('id', equipmentData.owner_id)
-            .maybeSingle(); // maybeSingle au lieu de single pour éviter l'erreur si pas trouvé
+            .maybeSingle();
 
           if (ownerError) {
             console.error("❌ Erreur chargement propriétaire:", ownerError);
+            console.error("❌ Code erreur:", ownerError.code);
+            console.error("❌ Message:", ownerError.message);
+            
+            // Si erreur de permissions, créer un profil par défaut
+            equipmentData.owner = {
+              id: equipmentData.owner_id,
+              first_name: 'Propriétaire',
+              last_name: '',
+              avatar_url: null
+            };
           } else if (ownerData) {
             console.log("✅ Propriétaire trouvé:", ownerData);
             equipmentData.owner = ownerData;
           } else {
-            console.warn("⚠️ Aucun profil trouvé pour cet owner_id");
+            console.warn("⚠️ Aucun profil retourné (peut-être RLS?)");
+            // Créer un profil par défaut
+            equipmentData.owner = {
+              id: equipmentData.owner_id,
+              first_name: 'Propriétaire',
+              last_name: '',
+              avatar_url: null
+            };
           }
         }
 
@@ -773,23 +790,22 @@ const EquipmentDetail = () => {
                       onClick={(e) => {
                         e.preventDefault();
                         const ownerId = equipment?.owner?.id || equipment?.owner_id;
-                        console.log('🔍 Clic propriétaire');
-                        console.log('   - equipment.owner?.id:', equipment?.owner?.id);
-                        console.log('   - equipment.owner_id:', equipment?.owner_id);
-                        console.log('   - ID utilisé:', ownerId);
+                        
+                        if (!equipment?.owner) {
+                          toast({
+                            title: "Propriétaire introuvable",
+                            description: "Les informations du propriétaire ne sont pas disponibles.",
+                            variant: "destructive"
+                          });
+                          return;
+                        }
                         
                         if (ownerId) {
                           navigate(`/owner/profile/${ownerId}`);
-                        } else {
-                          console.error('❌ Aucun ID propriétaire trouvé');
-                          toast({
-                            title: "Erreur",
-                            description: "Impossible de charger le profil du propriétaire",
-                            variant: "destructive"
-                          });
                         }
                       }}
-                      className={`flex items-center space-x-3 ${isMobile ? 'w-full' : 'flex-1'} text-left hover:bg-gray-50 rounded-lg p-2 transition-colors group`}
+                      className={`flex items-center space-x-3 ${isMobile ? 'w-full' : 'flex-1'} text-left hover:bg-gray-50 rounded-lg p-2 transition-colors group ${!equipment?.owner ? 'cursor-not-allowed opacity-50' : ''}`}
+                      disabled={!equipment?.owner}
                     >
                       <Avatar className={`${isMobile ? 'w-12 h-12' : 'w-16 h-16'}`}>
                         <AvatarImage src={equipment?.owner?.avatar_url} />
