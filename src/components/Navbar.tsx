@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -99,6 +98,8 @@ const Navbar: React.FC = () => {
                     >
                       <MessageSquare className="h-5 w-5 text-gray-600" />
                     </Button>
+                    {/* 🔔 AJOUT DES NOTIFICATIONS SUR MOBILE */}
+                    <NotificationBell />
                   </>
                 )}
                 <ProfileDropdown />

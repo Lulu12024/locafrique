@@ -327,14 +327,17 @@ const Index = () => {
       {/* Hero seulement sur desktop */}
       {!isMobile && <Hero onCitySearch={loadCityEquipments} />}
       
+      {/* Bannière mobile uniquement - AVANT les catégories */}
+      {isMobile && <MobileBanner />}
+      
       {/* Section Catégories Carousel */}
       <CategoryCarousel 
         onCategorySelect={handleCategorySelect}
         selectedCategory={selectedCategory}
       />
       
-      {/* Bannière mobile uniquement */}
-      <MobileBanner />
+      {/* Bannière mobile seulement sur desktop (si nécessaire) */}
+      {!isMobile && <MobileBanner />}
       
       {/* Section équipements populaires */}
       <section className={`${isMobile ? 'py-1 pt-4' : 'py-12'} bg-gray-50 flex-1`}>

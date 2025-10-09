@@ -179,6 +179,20 @@ const EquipmentDetail = () => {
   const [realEquipmentReviews, setRealEquipmentReviews] = useState<EquipmentReview[]>([]);
   const [realOwnerStats, setRealOwnerStats] = useState({ averageRating: 0, totalReviews: 0 });
 
+  const [similarEquipments, setSimilarEquipments] = useState<EquipmentData[]>([]);
+  const [bookedDates, setBookedDates] = useState<string[]>([]);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [showStickyNav, setShowStickyNav] = useState(false);
+  const [activeSection, setActiveSection] = useState('photos');
+  const [showStickyBooking, setShowStickyBooking] = useState(false);
+
+  // Refs pour les sections
+  const photosRef = React.useRef<HTMLDivElement>(null);
+  const aboutRef = React.useRef<HTMLDivElement>(null);
+  const reviewsRef = React.useRef<HTMLDivElement>(null);
+  const calendarRef = React.useRef<HTMLDivElement>(null);
+  const bookingCardRef = React.useRef<HTMLDivElement>(null);
+
   const [equipmentStats, setEquipmentStats] = useState({
     totalBookings: 0,
     averageRating: 0,
@@ -283,6 +297,12 @@ const EquipmentDetail = () => {
         setEquipment(equipmentData);
         await loadEquipmentStats(id);
         await incrementViewCount(id);
+        await loadBookedDates(id);
+        
+        // Charger les équipements similaires
+        if (equipmentData.category) {
+          await loadSimilarEquipments(equipmentData.category, id);
+        }
       } catch (error) {
         console.error("❌ Erreur inattendue:", error);
         setError("Une erreur inattendue s'est produite");
@@ -293,6 +313,50 @@ const EquipmentDetail = () => {
 
     fetchEquipment();
   }, [id]);
+
+  // Détecter le scroll pour afficher le menu sticky
+  useEffect(() => {
+    const handleScroll = () => {
+      // Afficher le menu après avoir scrollé 600px (après les images)
+      setShowStickyNav(window.scrollY > 600);
+
+      // Détecter si on a dépassé la carte de réservation
+      if (bookingCardRef.current) {
+        const rect = bookingCardRef.current.getBoundingClientRect();
+        // Si la carte est au-dessus de l'écran (on l'a dépassée)
+        setShowStickyBooking(rect.bottom < 100);
+      }
+
+      // Détecter quelle section est visible
+      const sections = [
+        { ref: photosRef, id: 'photos' },
+        { ref: aboutRef, id: 'about' },
+        { ref: reviewsRef, id: 'reviews' },
+        { ref: calendarRef, id: 'calendar' }
+      ];
+
+      for (const section of sections) {
+        if (section.ref.current) {
+          const rect = section.ref.current.getBoundingClientRect();
+          if (rect.top <= 150 && rect.bottom >= 150) {
+            setActiveSection(section.id);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Fonction pour scroller vers une section
+  const scrollToSection = (ref: React.RefObject<HTMLDivElement>) => {
+    if (ref.current) {
+      const top = ref.current.offsetTop - 140; // 140px = hauteur du header + menu sticky
+      window.scrollTo({ top, behavior: 'smooth' });
+    }
+  };
 
   const loadEquipmentStats = async (equipmentId: string) => {
     try {
@@ -338,6 +402,85 @@ const EquipmentDetail = () => {
 
   const incrementViewCount = async (equipmentId: string) => {
     setViewCount(Math.floor(Math.random() * 500) + 100);
+  };
+
+  // Charger les équipements similaires
+  const loadSimilarEquipments = async (category: string, currentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('equipments')
+        .select('*, images:equipment_images(*)')
+        .eq('category', category)
+        .eq('status', 'disponible')
+        .neq('id', currentId)
+        .limit(4);
+
+      if (!error && data) {
+        setSimilarEquipments(data);
+        console.log("✅ Équipements similaires chargés:", data.length);
+      }
+    } catch (error) {
+      console.error("❌ Erreur chargement équipements similaires:", error);
+    }
+  };
+
+  // Charger les dates réservées
+  const loadBookedDates = async (equipmentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('start_date, end_date')
+        .eq('equipment_id', equipmentId)
+        .in('status', ['confirmed', 'pending', 'in_progress']);
+
+      if (!error && data) {
+        const dates: string[] = [];
+        data.forEach(booking => {
+          const start = new Date(booking.start_date);
+          const end = new Date(booking.end_date);
+          
+          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            dates.push(d.toISOString().split('T')[0]);
+          }
+        });
+        
+        setBookedDates(dates);
+        console.log("✅ Dates réservées chargées:", dates.length);
+      }
+    } catch (error) {
+      console.error("❌ Erreur chargement dates réservées:", error);
+    }
+  };
+
+  // Fonctions calendrier
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    return { daysInMonth, startingDayOfWeek, year, month };
+  };
+
+  const isDateBooked = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    return bookedDates.includes(dateStr);
+  };
+
+  const isDatePast = (date: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return date < today;
+  };
+
+  const previousMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
   };
 
   const handleReservationSuccess = () => {
@@ -491,11 +634,98 @@ const EquipmentDetail = () => {
         </div>
       </div>
 
+      {/* MENU DE NAVIGATION STICKY (apparaît au scroll) */}
+      {!isMobile && showStickyNav && (
+        <div className="fixed top-16 left-0 right-0 z-40 bg-white border-b border-gray-200 shadow-sm">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="flex items-center justify-between h-14">
+              {/* Navigation gauche */}
+              <nav className="flex items-center space-x-8">
+                <button
+                  onClick={() => scrollToSection(photosRef)}
+                  className={`text-sm font-medium transition-colors pb-4 border-b-2 ${
+                    activeSection === 'photos'
+                      ? 'text-gray-900 border-gray-900'
+                      : 'text-gray-600 border-transparent hover:text-gray-900'
+                  }`}
+                >
+                  Photos
+                </button>
+                
+                <button
+                  onClick={() => scrollToSection(aboutRef)}
+                  className={`text-sm font-medium transition-colors pb-4 border-b-2 ${
+                    activeSection === 'about'
+                      ? 'text-gray-900 border-gray-900'
+                      : 'text-gray-600 border-transparent hover:text-gray-900'
+                  }`}
+                >
+                  Équipements
+                </button>
+                
+                <button
+                  onClick={() => scrollToSection(reviewsRef)}
+                  className={`text-sm font-medium transition-colors pb-4 border-b-2 ${
+                    activeSection === 'reviews'
+                      ? 'text-gray-900 border-gray-900'
+                      : 'text-gray-600 border-transparent hover:text-gray-900'
+                  }`}
+                >
+                  Commentaires
+                </button>
+                
+                <button
+                  onClick={() => scrollToSection(calendarRef)}
+                  className={`text-sm font-medium transition-colors pb-4 border-b-2 ${
+                    activeSection === 'calendar'
+                      ? 'text-gray-900 border-gray-900'
+                      : 'text-gray-600 border-transparent hover:text-gray-900'
+                  }`}
+                >
+                  Calendrier
+                </button>
+              </nav>
+
+              {/* Bouton de réservation (apparaît quand on dépasse la carte) */}
+              {showStickyBooking && (
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <div className="font-semibold text-gray-900">
+                      {formatPrice(equipment.daily_price)} FCFA
+                    </div>
+                    <div className="text-xs text-gray-600">par jour</div>
+                  </div>
+                  
+                  <Button
+                    onClick={() => {
+                      if (!user) {
+                        toast({
+                          title: "Connexion requise",
+                          variant: "destructive"
+                        });
+                        navigate('/auth');
+                        return;
+                      }
+                      setShowReservationModal(true);
+                    }}
+                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 shadow-md"
+                    disabled={equipment.status !== 'disponible'}
+                  >
+                    Réserver
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Contenu principal */}
       <div className="pt-16 pb-32">
         <div className={`max-w-7xl mx-auto ${isMobile ? 'px-4 py-4' : 'px-6 py-6'}`}>
           
           {/* GALERIE D'IMAGES - PLEINE LARGEUR EN HAUT */}
+          <div ref={photosRef}>
           {isMobile ? (
             /* MOBILE - Carrousel */
             <Card className="overflow-hidden mb-6">
@@ -651,6 +881,7 @@ const EquipmentDetail = () => {
               </div>
             </div>
           )}
+          </div>
 
           {/* CONTENU + SIDEBAR EN DESSOUS DES IMAGES */}
           <div className={`grid grid-cols-1 ${isMobile ? 'gap-6 pb-20' : 'lg:grid-cols-3 gap-6 lg:gap-8'}`}>
@@ -697,7 +928,7 @@ const EquipmentDetail = () => {
               </div>
 
               {/* Description */}
-              <Card>
+              <Card ref={aboutRef}>
                 <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
                   {isMobile ? (
                     <>
@@ -866,7 +1097,7 @@ const EquipmentDetail = () => {
               </Card>
 
               {/* Avis */}
-              <Card>
+              <Card ref={reviewsRef}>
                 <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
                   <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>Avis des clients</h3>
                   {realEquipmentReviews.length === 0 ? (
@@ -910,11 +1141,309 @@ const EquipmentDetail = () => {
                   )}
                 </CardContent>
               </Card>
+
+              {/* 1. CALENDRIER DE DISPONIBILITÉ */}
+              <Card ref={calendarRef}>
+                <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
+                  <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>
+                    Disponibilité
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    {/* Légende */}
+                    <div className="flex items-center justify-center gap-6 text-sm pb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-white border-2 border-gray-300 rounded"></div>
+                        <span className="text-gray-600">Disponible</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-gray-200 rounded"></div>
+                        <span className="text-gray-600">Réservé</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-gray-100 rounded opacity-50"></div>
+                        <span className="text-gray-600">Passé</span>
+                      </div>
+                    </div>
+
+                    {/* Calendrier */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                      {/* Header avec navigation */}
+                      <div className="flex items-center justify-between mb-4">
+                        <button
+                          onClick={previousMonth}
+                          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                          disabled={currentMonth.getMonth() === new Date().getMonth() && currentMonth.getFullYear() === new Date().getFullYear()}
+                        >
+                          <ChevronLeft className="h-5 w-5" />
+                        </button>
+                        
+                        <h4 className="font-semibold text-lg">
+                          {currentMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                        </h4>
+                        
+                        <button
+                          onClick={nextMonth}
+                          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                        >
+                          <ChevronRight className="h-5 w-5" />
+                        </button>
+                      </div>
+
+                      {/* Jours de la semaine */}
+                      <div className="grid grid-cols-7 gap-1 mb-2">
+                        {['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'].map((day) => (
+                          <div key={day} className="text-center text-sm font-medium text-gray-600 py-2">
+                            {day}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Jours du mois */}
+                      <div className="grid grid-cols-7 gap-1">
+                        {(() => {
+                          const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentMonth);
+                          const days = [];
+                          
+                          // Cellules vides avant le premier jour
+                          for (let i = 0; i < startingDayOfWeek; i++) {
+                            days.push(
+                              <div key={`empty-${i}`} className="aspect-square"></div>
+                            );
+                          }
+                          
+                          // Jours du mois
+                          for (let day = 1; day <= daysInMonth; day++) {
+                            const date = new Date(year, month, day);
+                            const isBooked = isDateBooked(date);
+                            const isPast = isDatePast(date);
+                            
+                            days.push(
+                              <div
+                                key={day}
+                                className={`
+                                  aspect-square flex items-center justify-center rounded-lg text-sm font-medium
+                                  ${isPast 
+                                    ? 'bg-gray-50 text-gray-400 cursor-not-allowed' 
+                                    : isBooked 
+                                      ? 'bg-gray-200 text-gray-600 cursor-not-allowed' 
+                                      : 'bg-white border-2 border-gray-300 text-gray-900 hover:border-green-500 cursor-pointer'
+                                  }
+                                `}
+                              >
+                                {day}
+                              </div>
+                            );
+                          }
+                          
+                          return days;
+                        })()}
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-gray-600 text-center pt-2">
+                      Les dates en blanc sont disponibles pour la réservation
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 2. CARTE DE LOCALISATION */}
+              <Card>
+                <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
+                  <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>
+                    Où récupérer l'équipement
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3">
+                      <MapPin className="h-5 w-5 text-green-600 mt-1 flex-shrink-0" />
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {equipment.location || 'Localisation'}
+                        </p>
+                        <p className="text-gray-600">
+                          {equipment.city}, {equipment.country}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Carte Google Maps intégrée */}
+                    <div className="w-full h-96 bg-gray-200 rounded-lg overflow-hidden relative">
+                      <iframe
+                        width="100%"
+                        height="100%"
+                        frameBorder="0"
+                        style={{ border: 0 }}
+                        referrerPolicy="no-referrer-when-downgrade"
+                        src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(`${equipment.city}, ${equipment.country}`)}&zoom=13`}
+                        allowFullScreen
+                        loading="lazy"
+                        title="Localisation de l'équipement"
+                      />
+                    </div>
+                    
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <p className="text-sm text-gray-700 flex items-start gap-2">
+                        <MapPin className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
+                        <span>
+                          La zone approximative est affichée sur la carte. L'adresse exacte sera communiquée après la confirmation de votre réservation pour des raisons de sécurité.
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 3. CONDITIONS & RÈGLES */}
+              <Card>
+                <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
+                  <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>
+                    Choses à savoir
+                  </h3>
+                  
+                  <div className={`grid ${isMobile ? 'grid-cols-1 gap-6' : 'grid-cols-3 gap-8'}`}>
+                    {/* Règles de location */}
+                    <div>
+                      <h4 className="font-semibold mb-4 flex items-center gap-2">
+                        <Package className="h-5 w-5 text-green-600" />
+                        Règles de location
+                      </h4>
+                      <ul className="space-y-2 text-sm text-gray-700">
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>Retour à l'heure convenue</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>État initial requis au retour</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>Pièce d'identité obligatoire</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>Caution remboursable</span>
+                        </li>
+                      </ul>
+                    </div>
+
+                    {/* Santé et sécurité */}
+                    <div>
+                      <h4 className="font-semibold mb-4 flex items-center gap-2">
+                        <Shield className="h-5 w-5 text-green-600" />
+                        Santé et sécurité
+                      </h4>
+                      <ul className="space-y-2 text-sm text-gray-700">
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>Équipement vérifié régulièrement</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>Nettoyage après chaque utilisation</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>Assurance responsabilité civile</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>Support technique disponible</span>
+                        </li>
+                      </ul>
+                    </div>
+
+                    {/* Politique d'annulation */}
+                    <div>
+                      <h4 className="font-semibold mb-4 flex items-center gap-2">
+                        <Clock className="h-5 w-5 text-green-600" />
+                        Politique d'annulation
+                      </h4>
+                      <ul className="space-y-2 text-sm text-gray-700">
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>Annulation gratuite 24h avant</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>Remboursement de 50% si 48h avant</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>Pas de remboursement moins de 24h</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          <span>Caution retournée sous 48h</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 4. ÉQUIPEMENTS SIMILAIRES */}
+              {similarEquipments.length > 0 && (
+                <Card>
+                  <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
+                    <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>
+                      Équipements similaires
+                    </h3>
+                    
+                    <div className={`grid ${isMobile ? 'grid-cols-1 gap-4' : 'grid-cols-2 lg:grid-cols-4 gap-4'}`}>
+                      {similarEquipments.map((item) => {
+                        const itemImages = Array.isArray(item.images) && item.images.length > 0
+                          ? item.images.map(img => typeof img === 'string' ? img : img?.image_url).filter(Boolean)
+                          : ['/api/placeholder/300/200'];
+
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              navigate(`/equipments/details/${item.id}`);
+                              window.scrollTo(0, 0);
+                            }}
+                            className="group text-left hover:shadow-lg transition-shadow rounded-lg overflow-hidden border border-gray-200"
+                          >
+                            <div className="aspect-video relative overflow-hidden bg-gray-200">
+                              <SafeImage
+                                src={itemImages[0]}
+                                alt={item.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                category={item.category}
+                              />
+                            </div>
+                            <div className="p-3">
+                              <h4 className="font-medium text-gray-900 mb-1 line-clamp-1">
+                                {item.title}
+                              </h4>
+                              <p className="text-sm text-gray-600 mb-2 line-clamp-1">
+                                {item.location}, {item.city}
+                              </p>
+                              <div className="flex items-center justify-between">
+                                <span className="font-semibold text-green-600">
+                                  {formatPrice(item.daily_price)} FCFA
+                                </span>
+                                <span className="text-xs text-gray-500">par jour</span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* Sidebar réservation */}
             <div className="space-y-6">
-              <Card className={`${isMobile ? 'border-2 border-blue-200 shadow-xl' : 'sticky top-24 border border-gray-200 shadow-lg'}`}>
+              <Card 
+                ref={bookingCardRef}
+                className={`${isMobile ? 'border-2 border-blue-200 shadow-xl' : 'border border-gray-200 shadow-lg'}`}
+              >
                 <CardContent className={`${isMobile ? 'p-4' : 'p-6'}`}>
                   {isMobile ? (
                     <>
