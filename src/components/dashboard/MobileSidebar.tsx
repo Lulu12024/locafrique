@@ -53,8 +53,8 @@ const MobileSidebar: React.FC<MobileSidebarProps> = ({
     { id: "rentals", label: "Mes locations", icon: ShoppingCart, show: true },
     
     // MENUS COMMUNS
-    { id: "contracts", label: "Contrats", icon: FileText, show: true },
-    { id: "wallet", label: "Portefeuille", icon: Wallet, show: true },
+    // { id: "contracts", label: "Contrats", icon: FileText, show: true },
+    // { id: "wallet", label: "Portefeuille", icon: Wallet, show: true },
     { id: "history", label: "Historique", icon: History, show: true },
     { id: "profile", label: "Paramètres", icon: Settings, show: true },
   ];

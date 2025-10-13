@@ -97,16 +97,16 @@ function ProfileDropdown() {
     },
     
     // MENUS COMMUNS
-    {
-      icon: FileText,
-      label: 'Contrats',
-      onClick: () => handleNavigation('/my-contracts')
-    },
-    {
-      icon: Wallet,
-      label: 'Portefeuille',
-      onClick: () => handleNavigation('/my-wallet')
-    },
+    // {
+    //   icon: FileText,
+    //   label: 'Contrats',
+    //   onClick: () => handleNavigation('/my-contracts')
+    // },
+    // {
+    //   icon: Wallet,
+    //   label: 'Portefeuille',
+    //   onClick: () => handleNavigation('/my-wallet')
+    // },
     {
       icon: History,
       label: 'Historique',

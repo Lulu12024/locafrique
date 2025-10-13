@@ -117,7 +117,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
           </Button>
           
           {/* MENUS COMMUNS - Inchangés */}
-          <Button 
+          {/* <Button 
             variant={activeTab === "contracts" ? "default" : "ghost"} 
             className="w-full justify-start text-sm"
             onClick={() => handleMenuClick("contracts")}
@@ -125,9 +125,9 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
           >
             <FileText className="h-4 w-4 mr-2" />
             Contratsss
-          </Button>
+          </Button> */}
           
-          <Button 
+          {/* <Button 
             variant={activeTab === "wallet" ? "default" : "ghost"} 
             className="w-full justify-start text-sm"
             onClick={() => handleMenuClick("wallet")}
@@ -135,7 +135,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
           >
             <Wallet className="h-4 w-4 mr-2" />
             Portefeuille
-          </Button>
+          </Button> */}
           
           <Button 
             variant={activeTab === "history" ? "default" : "ghost"} 

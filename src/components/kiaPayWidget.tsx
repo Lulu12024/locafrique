@@ -47,6 +47,7 @@ export const KkiaPayWidget: React.FC<KkiaPayWidgetProps> = ({
     }
 
     const script = document.createElement('script');
+    script.setAttribute('data-z-index', '999999');
     script.src = 'https://cdn.kkiapay.me/k.js';
     script.async = true;
     script.onload = () => {
