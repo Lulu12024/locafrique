@@ -1,5 +1,6 @@
 // src/components/booking/ReservationModal.tsx
-// VERSION SIMPLIFIÉE : Paiement KakiaPay UNIQUEMENT - Pas de wallet
+// VERSION SANS PAIEMENT : Le paiement KakiaPay est commenté, réservation directe sans payer
+// Pour réactiver le paiement : décommenter les sections marquées /* PAIEMENT */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -17,7 +18,7 @@ import { cn } from '@/lib/utils';
 import { 
   CheckCircle, 
   Clock,
-  CreditCard,
+  // CreditCard, /* PAIEMENT */
   Info,
   Zap,
   Upload,
@@ -28,9 +29,9 @@ import {
 import { useAuth } from '@/hooks/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
-import { KkiaPayWidget } from '@/components/KkiaPayWidget';
+// import { KkiaPayWidget } from '@/components/KkiaPayWidget'; /* PAIEMENT */
 
-// Déclarations TypeScript pour KakiaPay
+/* PAIEMENT - Déclarations TypeScript pour KakiaPay
 declare global {
   interface Window {
     openKkiapayWidget: (config: any) => void;
@@ -38,6 +39,7 @@ declare global {
     removeKkiapayListener: (event: string, callback: (response: any) => void) => void;
   }
 }
+*/
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -49,177 +51,34 @@ interface ReservationModalProps {
   total?: number;
 }
 
-// Fonctions utilitaires
-const safeToLocaleString = (value: any): string => {
-  try {
-    const num = Number(value);
-    if (isNaN(num)) return '0';
-    return num.toLocaleString();
-  } catch {
-    return '0';
-  }
-};
-
-const safeFormatDate = (date: Date | string, formatType: 'short' | 'long' = 'short'): string => {
-  try {
-    let dateObj: Date;
-    
-    if (typeof date === 'string') {
-      dateObj = new Date(date);
-    } else if (date instanceof Date) {
-      dateObj = date;
-    } else {
-      return 'Date invalide';
-    }
-    
-    if (isNaN(dateObj.getTime())) {
-      return 'Date invalide';
-    }
-    
-    if (formatType === 'long') {
-      return dateObj.toLocaleDateString('fr-FR', { 
-        day: 'numeric', 
-        month: 'long', 
-        year: 'numeric' 
-      });
-    } else {
-      return dateObj.toLocaleDateString('fr-FR', { 
-        day: 'numeric', 
-        month: 'short' 
-      });
-    }
-  } catch (error) {
-    console.error('Erreur formatage date:', error);
-    return 'Date invalide';
-  }
-};
-
-const calculateDays = (start: Date, end: Date): number => {
-  try {
-    const timeDiff = end.getTime() - start.getTime();
-    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-    return Math.max(1, daysDiff);
-  } catch {
-    return 1;
-  }
-};
-
 function ReservationModal({
   isOpen,
   onClose,
   onSuccess,
   equipment,
-  startDate: initialStartDate,
-  endDate: initialEndDate,
+  startDate,
+  endDate,
+  total
 }: ReservationModalProps) {
   const { user } = useAuth();
-  
-  if (!isOpen) {
-    return null;
-  }
-  
-  // Validation de l'équipement
-  const validEquipment = useMemo(() => {
-    if (!equipment || typeof equipment !== 'object') {
-      return {
-        id: '',
-        title: 'Équipement non spécifié',
-        daily_price: 0,
-        weekly_price: 0,
-        deposit_amount: 0,
-        owner_id: ''
-      };
-    }
-    return {
-      id: equipment.id || '',
-      title: equipment.title || 'Équipement',
-      daily_price: Number(equipment.daily_price) || 0,
-      weekly_price: Number(equipment.weekly_price) || 0,
-      deposit_amount: Number(equipment.deposit_amount) || 0,
-      owner_id: equipment.owner_id || ''
-    };
-  }, [equipment]);
-
-  // États pour les dates
-  const [selectedStartDate, setSelectedStartDate] = useState<Date>(() => {
-    try {
-      if (initialStartDate) {
-        const date = typeof initialStartDate === 'string' ? new Date(initialStartDate) : initialStartDate;
-        return !isNaN(date.getTime()) ? date : new Date();
-      }
-      return new Date();
-    } catch {
-      return new Date();
-    }
-  });
-
-  const [selectedEndDate, setSelectedEndDate] = useState<Date>(() => {
-    try {
-      if (initialEndDate) {
-        const date = typeof initialEndDate === 'string' ? new Date(initialEndDate) : initialEndDate;
-        return !isNaN(date.getTime()) ? date : new Date(Date.now() + 24 * 60 * 60 * 1000);
-      }
-      const start = selectedStartDate || new Date();
-      return new Date(start.getTime() + 24 * 60 * 60 * 1000);
-    } catch {
-      return new Date(Date.now() + 24 * 60 * 60 * 1000);
-    }
-  });
-
-  // Calcul du prix total
-  const calculatedTotal = useMemo(() => {
-    try {
-      const days = calculateDays(selectedStartDate, selectedEndDate);
-      const dailyPrice = validEquipment.daily_price;
-      const weeklyPrice = validEquipment.weekly_price;
-      
-      if (days >= 7 && weeklyPrice > 0) {
-        const weeks = Math.floor(days / 7);
-        const remainingDays = days % 7;
-        const weeklyTotal = weeks * weeklyPrice;
-        const dailyTotal = remainingDays * dailyPrice;
-        return weeklyTotal + dailyTotal;
-      } else {
-        return days * dailyPrice;
-      }
-    } catch {
-      return 0;
-    }
-  }, [selectedStartDate, selectedEndDate, validEquipment.daily_price, validEquipment.weekly_price]);
-
-  // États du composant
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // États pour les dates
+  const [selectedStartDate, setSelectedStartDate] = useState<Date>(
+    startDate ? new Date(startDate) : new Date()
+  );
+  const [selectedEndDate, setSelectedEndDate] = useState<Date>(
+    endDate ? new Date(endDate) : new Date()
+  );
   const [isStartDateOpen, setIsStartDateOpen] = useState(false);
   const [isEndDateOpen, setIsEndDateOpen] = useState(false);
-  const [paymentCompleted, setPaymentCompleted] = useState(false);
-  const [kakiaPayTransactionId, setKakiaPayTransactionId] = useState<string | null>(null);
-  
-  // ✅ Charger le script KakiaPay
-  useEffect(() => {
-    if (!document.querySelector('script[src*="kkiapay"]')) {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.kkiapay.me/k.js';
-      script.async = true;
-      document.head.appendChild(script);
-    }
-  }, []);
-  
-  const feeCalculations = useMemo(() => {
-    const baseCost = calculatedTotal;
-    const commissionAmount = Math.round(baseCost * 0.05);
-    const platformFee = 0; // Pas de frais supplémentaire pour le locataire
-    const totalWithFees = baseCost + commissionAmount + platformFee;
-    
-    return {
-      baseCost,
-      commissionAmount,
-      platformFee,
-      totalWithFees
-    };
-  }, [calculatedTotal]);
 
-  // États pour les détails de réservation
+  /* PAIEMENT - États pour le paiement
+  const [paymentCompleted, setPaymentCompleted] = useState(false);
+  const [kakiaPayTransactionId, setKakiaPayTransactionId] = useState<string>('');
+  */
+
   const [reservationDetails, setReservationDetails] = useState({
     contactPhone: '',
     deliveryMethod: 'pickup',
@@ -230,7 +89,62 @@ function ReservationModal({
     acceptTerms: false
   });
 
-  // Gestion des changements d'input
+  const validEquipment = useMemo(() => equipment, [equipment]);
+
+  // Calcul des prix
+  const feeCalculations = useMemo(() => {
+    if (!validEquipment?.daily_price) {
+      return {
+        baseCost: 0,
+        numberOfDays: 0,
+        commissionAmount: 0,
+        platformFee: 0,
+        totalWithFees: 0
+      };
+    }
+
+    const start = new Date(selectedStartDate);
+    const end = new Date(selectedEndDate);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const numberOfDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    
+    const baseCost = validEquipment.daily_price * numberOfDays;
+    const commissionAmount = Math.round(baseCost * 0.05);
+    const platformFee = 500;
+    const totalWithFees = baseCost + commissionAmount + platformFee;
+
+    return {
+      baseCost,
+      numberOfDays,
+      commissionAmount,
+      platformFee,
+      totalWithFees
+    };
+  }, [validEquipment, selectedStartDate, selectedEndDate]);
+
+  // Fonctions utilitaires
+  const safeFormatDate = (date: Date | string | undefined, format: 'short' | 'long' = 'short') => {
+    if (!date) return 'Date non définie';
+    try {
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      if (format === 'long') {
+        return dateObj.toLocaleDateString('fr-FR', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
+      }
+      return dateObj.toLocaleDateString('fr-FR');
+    } catch {
+      return 'Date invalide';
+    }
+  };
+
+  const safeToLocaleString = (value: number | undefined) => {
+    return value?.toLocaleString() || '0';
+  };
+
   const handleInputChange = (field: string, value: any) => {
     setReservationDetails(prev => ({
       ...prev,
@@ -238,77 +152,62 @@ function ReservationModal({
     }));
   };
 
-  // Gestion des dates
-  const handleStartDateChange = (date: Date | undefined) => {
-    if (date) {
-      setSelectedStartDate(date);
-      if (selectedEndDate <= date) {
-        const newEndDate = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-        setSelectedEndDate(newEndDate);
-      }
-      setIsStartDateOpen(false);
-    }
-  };
-
-  const handleEndDateChange = (date: Date | undefined) => {
-    if (date && date > selectedStartDate) {
-      setSelectedEndDate(date);
-      setIsEndDateOpen(false);
-    }
-  };
-
-  // Gestion du fichier d'identité
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
         toast({
           title: "Fichier trop volumineux",
-          description: "La taille maximale autorisée est de 5MB.",
+          description: "La taille maximale est de 5MB.",
           variant: "destructive"
         });
         return;
       }
-      
-      const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-      if (!allowedTypes.includes(file.type)) {
-        toast({
-          title: "Format non supporté",
-          description: "Seuls les formats JPG et PNG sont acceptés.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
       handleInputChange('identityDocument', file);
     }
   };
 
-  // Navigation entre les étapes
   const nextStep = () => {
+    // Validations
     if (currentStep === 1) {
-      if (calculatedTotal <= 0) {
+      if (!selectedStartDate || !selectedEndDate) {
         toast({
-          title: "Période invalide",
-          description: "Veuillez sélectionner une période de location valide.",
+          title: "Dates requises",
+          description: "Veuillez sélectionner les dates de début et de fin.",
+          variant: "destructive"
+        });
+        return;
+      }
+      if (selectedEndDate <= selectedStartDate) {
+        toast({
+          title: "Dates invalides",
+          description: "La date de fin doit être après la date de début.",
           variant: "destructive"
         });
         return;
       }
     } else if (currentStep === 2) {
-      if (!reservationDetails.contactPhone.trim()) {
+      if (!reservationDetails.contactPhone) {
         toast({
           title: "Téléphone requis",
-          description: "Veuillez saisir votre numéro de téléphone.",
+          description: "Veuillez fournir un numéro de téléphone.",
+          variant: "destructive"
+        });
+        return;
+      }
+      if (reservationDetails.deliveryMethod === 'delivery' && !reservationDetails.deliveryAddress) {
+        toast({
+          title: "Adresse requise",
+          description: "Veuillez fournir une adresse de livraison.",
           variant: "destructive"
         });
         return;
       }
     } else if (currentStep === 3) {
-      if (!reservationDetails.identityNumber.trim() || !reservationDetails.identityDocument) {
+      if (!reservationDetails.identityNumber) {
         toast({
-          title: "Vérification d'identité requise",
-          description: "Veuillez fournir votre numéro et document d'identité.",
+          title: "Numéro d'identité requis",
+          description: "Veuillez fournir votre numéro d'identité.",
           variant: "destructive"
         });
         return;
@@ -322,6 +221,9 @@ function ReservationModal({
         });
         return;
       }
+      // ✅ SANS PAIEMENT : Créer directement la réservation
+      createBookingDirectly();
+      return;
     }
 
     setCurrentStep(prev => Math.min(prev + 1, 5));
@@ -331,9 +233,8 @@ function ReservationModal({
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
-  // ✅ Fonction pour ouvrir KakiaPay après fermeture du modal
+  /* PAIEMENT - Fonction pour ouvrir KakiaPay
   const handleOpenKakiaPay = () => {
-    // Utiliser directement l'API KakiaPay
     if (window.openKkiapayWidget) {
       window.openKkiapayWidget({
         amount: feeCalculations.totalWithFees,
@@ -359,7 +260,6 @@ function ReservationModal({
         }
       });
 
-      // Écouter les événements KakiaPay
       window.addKkiapayListener('success', async (response: any) => {
         console.log('✅ Paiement réussi:', response);
         await handleKakiaPaySuccess(response);
@@ -378,19 +278,14 @@ function ReservationModal({
     }
   };
 
-  // ✅ Gestionnaire de succès du paiement KakiaPay
   const handleKakiaPaySuccess = async (response: any) => {
     console.log('✅ Paiement KakiaPay réussi:', response);
-    
     setPaymentCompleted(true);
     setKakiaPayTransactionId(response.transactionId || response.transaction_id);
-
     toast({
       title: "✅ Paiement validé !",
       description: "Création de votre réservation en cours...",
     });
-
-    // Créer la réservation maintenant que le paiement est confirmé
     await createBookingAfterPayment(response.transactionId || response.transaction_id);
   };
 
@@ -410,9 +305,10 @@ function ReservationModal({
       description: "Vous pouvez réessayer quand vous le souhaitez.",
     });
   };
+  */ // FIN PAIEMENT
 
-  // ✅ Création de la réservation APRÈS le paiement
-  const createBookingAfterPayment = async (transactionId: string) => {
+  // ✅ SANS PAIEMENT : Création directe de la réservation
+  const createBookingDirectly = async () => {
     if (!user?.id || !validEquipment.id) {
       toast({
         title: "Erreur",
@@ -426,6 +322,136 @@ function ReservationModal({
 
     try {
       // Upload du document d'identité
+      let documentUrl = null;
+      if (reservationDetails.identityDocument) {
+        try {
+          const fileExt = reservationDetails.identityDocument.name.split('.').pop() || 'jpg';
+          // ✅ Format correct pour RLS: identity_USER_ID/filename
+          const fileName = `identity_${user.id}/${Date.now()}.${fileExt}`;
+          
+          console.log('📤 Upload document identité:', fileName);
+          
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('identity-documents')
+            .upload(fileName, reservationDetails.identityDocument, {
+              cacheControl: '3600',
+              upsert: false
+            });
+
+          if (uploadError) {
+            console.error('❌ Erreur upload:', uploadError);
+            throw uploadError;
+          }
+
+          if (uploadData) {
+            const { data: publicUrlData } = supabase.storage
+              .from('identity-documents')
+              .getPublicUrl(uploadData.path);
+            documentUrl = publicUrlData.publicUrl;
+            console.log('✅ Document uploadé:', documentUrl);
+          }
+        } catch (uploadErr) {
+          console.error("❌ Exception upload:", uploadErr);
+          toast({
+            title: "Erreur upload",
+            description: "Impossible d'uploader le document. Continuons sans.",
+            variant: "destructive"
+          });
+        }
+      }
+
+      // ✅ Créer la réservation SANS PAIEMENT
+      const bookingData = {
+        equipment_id: validEquipment.id,
+        renter_id: user.id,
+        start_date: selectedStartDate.toISOString().split('T')[0],
+        end_date: selectedEndDate.toISOString().split('T')[0],
+        total_price: feeCalculations.baseCost,
+        deposit_amount: validEquipment.deposit_amount,
+        status: 'pending', // En attente de validation du propriétaire
+        payment_status: 'pending', // ✅ SANS PAIEMENT : 'pending' au lieu de 'paid'
+        payment_method: null, // ✅ Pas de méthode de paiement pour le moment
+        transaction_id: null, // ✅ Pas de transaction
+        contact_phone: reservationDetails.contactPhone || '',
+        delivery_method: reservationDetails.deliveryMethod || 'pickup',
+        delivery_address: reservationDetails.deliveryAddress || null,
+        special_requests: reservationDetails.specialRequests || null,
+        commission_amount: feeCalculations.commissionAmount,
+        platform_fee: feeCalculations.platformFee,
+        identity_verified: true,
+        identity_document_url: documentUrl
+      };
+
+      const { data: booking, error: bookingError } = await supabase
+        .from('bookings')
+        .insert(bookingData)
+        .select()
+        .single();
+
+      if (bookingError) {
+        throw bookingError;
+      }
+
+      console.log('✅ Réservation créée sans paiement:', booking.id);
+
+      // ✅ La notification est maintenant créée dans l'Edge Function (contourne RLS)
+      // Pas besoin de créer la notification ici
+
+      // Envoyer l'email au propriétaire (qui créera aussi la notification)
+      try {
+        console.log('📧 Envoi email au propriétaire...');
+        
+        const { data: emailResult, error: emailError } = await supabase.functions.invoke(
+          'send-booking-notification-gmail',
+          {
+            body: { booking_id: booking.id }
+          }
+        );
+
+        if (emailError) {
+          console.error('⚠️ Erreur envoi email:', emailError);
+        } else if (emailResult?.success) {
+          console.log('✅ Email envoyé avec succès au propriétaire');
+        }
+      } catch (emailError: any) {
+        console.error('⚠️ Exception lors de l\'envoi email:', emailError.message);
+      }
+
+      toast({
+        title: "🎉 Réservation créée !",
+        description: "Le propriétaire a été notifié. Vous serez contacté pour le paiement.",
+        duration: 5000
+      });
+
+      onSuccess();
+      onClose();
+
+    } catch (error: any) {
+      console.error('❌ Erreur création réservation:', error);
+      toast({
+        title: "Erreur",
+        description: error.message || "Une erreur est survenue lors de la création de la réservation.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /* PAIEMENT - Création de réservation APRÈS paiement
+  const createBookingAfterPayment = async (transactionId: string) => {
+    if (!user?.id || !validEquipment.id) {
+      toast({
+        title: "Erreur",
+        description: "Informations utilisateur manquantes.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
       let documentUrl = null;
       if (reservationDetails.identityDocument) {
         try {
@@ -447,7 +473,6 @@ function ReservationModal({
         }
       }
 
-      // Créer la réservation
       const bookingData = {
         equipment_id: validEquipment.id,
         renter_id: user.id,
@@ -455,8 +480,8 @@ function ReservationModal({
         end_date: selectedEndDate.toISOString().split('T')[0],
         total_price: feeCalculations.baseCost,
         deposit_amount: validEquipment.deposit_amount,
-        status: 'pending', // ✅ En attente de validation du propriétaire
-        payment_status: 'paid', // ✅ Déjà payé via KakiaPay
+        status: 'pending',
+        payment_status: 'paid', // Payé via KakiaPay
         payment_method: 'kakiapay',
         transaction_id: transactionId,
         contact_phone: reservationDetails.contactPhone || '',
@@ -479,39 +504,31 @@ function ReservationModal({
         throw bookingError;
       }
 
-      console.log('✅ Réservation créée:', booking.id);
+      console.log('✅ Réservation créée avec paiement:', booking.id);
 
-      // ✅ Créer la notification in-app pour le propriétaire
       await supabase.from('notifications').insert({
         user_id: validEquipment.owner_id,
         type: 'new_booking',
         title: '🔔 Nouvelle réservation payée',
-        message: `${user.email} a réservé "${validEquipment.title}" du ${safeFormatDate(selectedStartDate, 'long')} au ${safeFormatDate(selectedEndDate, 'long')} pour ${safeToLocaleString(feeCalculations.baseCost)} FCFA. Paiement confirmé.`,
+        message: `${user.email} a réservé "${validEquipment.title}" pour ${safeToLocaleString(feeCalculations.baseCost)} FCFA. Paiement confirmé.`,
         booking_id: booking.id
       });
 
-      // ✅ Envoyer l'email au propriétaire
       try {
-        console.log('📧 Envoi email au propriétaire via Gmail...');
-        
         const { data: emailResult, error: emailError } = await supabase.functions.invoke(
-          'send-booking-notification-gmail', // ← Nouvelle fonction Gmail
+          'send-booking-notification-gmail',
           {
             body: { booking_id: booking.id }
           }
         );
 
         if (emailError) {
-          console.error('⚠️ Erreur envoi email au propriétaire:', emailError);
-          // L'email n'est pas critique, on continue quand même
+          console.error('⚠️ Erreur envoi email:', emailError);
         } else if (emailResult?.success) {
-          console.log('✅ Email envoyé avec succès au propriétaire');
-        } else {
-          console.warn('⚠️ Email non envoyé, mais réservation créée');
+          console.log('✅ Email envoyé au propriétaire');
         }
       } catch (emailError: any) {
-        console.error('⚠️ Exception lors de l\'envoi email:', emailError.message);
-        // Ne pas bloquer la réservation si l'email échoue
+        console.error('⚠️ Exception email:', emailError.message);
       }
 
       toast({
@@ -527,13 +544,14 @@ function ReservationModal({
       console.error('❌ Erreur création réservation:', error);
       toast({
         title: "Erreur",
-        description: error.message || "Une erreur est survenue lors de la création de la réservation.",
+        description: error.message || "Une erreur est survenue.",
         variant: "destructive"
       });
     } finally {
       setIsSubmitting(false);
     }
   };
+  */ // FIN PAIEMENT
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -557,255 +575,321 @@ function ReservationModal({
               {/* Indicateur de progression */}
               <div className="mt-3 sm:mt-6">
                 <div className="flex items-center justify-between">
-                  {[1, 2, 3, 4, 5].map((step) => (
+                  {[1, 2, 3, 4].map((step) => (
                     <div key={step} className="flex items-center">
                       <div className={cn(
                         "w-6 h-6 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all",
                         currentStep >= step 
-                          ? "bg-white text-emerald-600 shadow-lg" 
-                          : "bg-emerald-400 text-white"
+                          ? "bg-white text-emerald-600" 
+                          : "bg-emerald-500/30 text-white"
                       )}>
-                        {currentStep > step ? <CheckCircle className="h-3 w-3 sm:h-6 sm:w-6" /> : step}
+                        {step}
                       </div>
-                      {step < 5 && (
+                      {step < 4 && (
                         <div className={cn(
-                          "w-4 sm:w-12 lg:w-16 h-1 mx-1 sm:mx-2 transition-all",
-                          currentStep > step ? "bg-white" : "bg-emerald-400"
+                          "h-1 w-8 sm:w-16 mx-1 transition-all",
+                          currentStep > step ? "bg-white" : "bg-emerald-500/30"
                         )} />
                       )}
                     </div>
                   ))}
                 </div>
+                <div className="flex justify-between mt-2 text-xs sm:text-sm">
+                  <span className="text-white/90">Dates</span>
+                  <span className="text-white/90">Contact</span>
+                  <span className="text-white/90">Identité</span>
+                  <span className="text-white/90">Confirmer</span>
+                </div>
               </div>
             </div>
           </DialogHeader>
 
-          {/* Corps du modal avec scroll */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-3 sm:p-6 space-y-3 sm:space-y-6">
-              
-              {/* Étape 1: Sélection des dates */}
-              {currentStep === 1 && (
-                <div className="space-y-4 sm:space-y-6">
-                  <div className="text-center">
-                    <h3 className="text-lg font-semibold mb-4">Choisissez vos dates</h3>
-                    
-                    <div className="space-y-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:space-y-0 mb-6">
-                      {/* Date de début */}
-                      <div className="space-y-2">
-                        <Label className="text-sm">Date de début</Label>
-                        <Popover open={isStartDateOpen} onOpenChange={setIsStartDateOpen}>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full justify-start text-left font-normal text-sm"
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              <span className="truncate">{safeFormatDate(selectedStartDate, 'long')}</span>
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0 z-[10000]" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={selectedStartDate}
-                              onSelect={handleStartDateChange}
-                              disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-
-                      {/* Date de fin */}
-                      <div className="space-y-2">
-                        <Label className="text-sm">Date de fin</Label>
-                        <Popover open={isEndDateOpen} onOpenChange={setIsEndDateOpen}>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full justify-start text-left font-normal text-sm"
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              <span className="truncate">{safeFormatDate(selectedEndDate, 'long')}</span>
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0 z-[10000]" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={selectedEndDate}
-                              onSelect={handleEndDateChange}
-                              disabled={(date) => date <= selectedStartDate}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            {/* Étape 1: Sélection des dates */}
+            {currentStep === 1 && (
+              <div className="space-y-4 sm:space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Sélectionnez vos dates</h3>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Date de début */}
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">Date de début</Label>
+                      <Popover open={isStartDateOpen} onOpenChange={setIsStartDateOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {safeFormatDate(selectedStartDate)}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={selectedStartDate}
+                            onSelect={(date) => {
+                              if (date) {
+                                setSelectedStartDate(date);
+                                setIsStartDateOpen(false);
+                              }
+                            }}
+                            disabled={(date) => date < new Date()}
+                          />
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
-                    {/* Résumé */}
-                    <Card className="bg-blue-50 border-blue-200">
-                      <CardContent className="p-3 sm:p-4">
-                        <div className="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-4">
-                          <div className="text-center">
-                            <p className="text-xs sm:text-sm text-blue-600">Durée</p>
-                            <p className="font-bold text-sm sm:text-base text-blue-800">
-                              {calculateDays(selectedStartDate, selectedEndDate)} jour(s)
-                            </p>
-                          </div>
-                          <div className="hidden sm:block w-px h-8 bg-blue-300" />
-                          <div className="text-center">
-                            <p className="text-xs sm:text-sm text-blue-600">Prix journalier</p>
-                            <p className="font-bold text-sm sm:text-base text-blue-800">
-                              {safeToLocaleString(validEquipment.daily_price)} FCFA
-                            </p>
-                          </div>
-                          <div className="hidden sm:block w-px h-8 bg-blue-300" />
-                          <div className="text-center">
-                            <p className="text-xs sm:text-sm text-blue-600">Total</p>
-                            <p className="text-lg sm:text-xl font-bold text-green-600">
-                              {safeToLocaleString(calculatedTotal)} FCFA
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {validEquipment.weekly_price > 0 && calculateDays(selectedStartDate, selectedEndDate) >= 7 && (
-                      <Alert className="border-green-200 bg-green-50 mt-4">
-                        <Calculator className="h-4 w-4 text-green-600" />
-                        <AlertDescription className="text-green-700 text-sm">
-                          Prix hebdomadaire appliqué ! Vous économisez.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Étape 2: Contact */}
-              {currentStep === 2 && (
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="phone" className="text-sm">Numéro de téléphone *</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      placeholder="+229 XX XX XX XX"
-                      value={reservationDetails.contactPhone}
-                      onChange={(e) => handleInputChange('contactPhone', e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="delivery" className="text-sm">Mode de livraison</Label>
-                    <Select value={reservationDetails.deliveryMethod} onValueChange={(value) => handleInputChange('deliveryMethod', value)}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pickup">Retrait sur place</SelectItem>
-                        <SelectItem value="delivery">Livraison</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {reservationDetails.deliveryMethod === 'delivery' && (
+                    {/* Date de fin */}
                     <div>
-                      <Label htmlFor="address" className="text-sm">Adresse de livraison</Label>
+                      <Label className="text-sm font-medium mb-2 block">Date de fin</Label>
+                      <Popover open={isEndDateOpen} onOpenChange={setIsEndDateOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {safeFormatDate(selectedEndDate)}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={selectedEndDate}
+                            onSelect={(date) => {
+                              if (date) {
+                                setSelectedEndDate(date);
+                                setIsEndDateOpen(false);
+                              }
+                            }}
+                            disabled={(date) => date <= selectedStartDate}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+
+                  {/* Récapitulatif des coûts */}
+                  <Card className="mt-6 bg-gradient-to-br from-blue-50 to-emerald-50 border-blue-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center mb-3">
+                        <Calculator className="h-5 w-5 text-blue-600 mr-2" />
+                        <h4 className="font-semibold text-blue-900">Estimation des coûts</h4>
+                      </div>
+                      
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span>Prix journalier</span>
+                          <span className="font-medium">{safeToLocaleString(validEquipment.daily_price)} FCFA</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Nombre de jours</span>
+                          <span className="font-medium">{feeCalculations.numberOfDays}</span>
+                        </div>
+                        <Separator />
+                        <div className="flex justify-between font-semibold text-blue-700">
+                          <span>Sous-total</span>
+                          <span>{safeToLocaleString(feeCalculations.baseCost)} FCFA</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span>Commission plateforme (5%)</span>
+                          <span>{safeToLocaleString(feeCalculations.commissionAmount)} FCFA</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span>Frais de service</span>
+                          <span>{safeToLocaleString(feeCalculations.platformFee)} FCFA</span>
+                        </div>
+                        <Separator />
+                        <div className="flex justify-between text-base font-bold text-emerald-700">
+                          <span>Total</span>
+                          <span>{safeToLocaleString(feeCalculations.totalWithFees)} FCFA</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {/* Étape 2: Informations de contact */}
+            {currentStep === 2 && (
+              <div className="space-y-4 sm:space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Informations de contact</h3>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="phone">Numéro de téléphone *</Label>
                       <Input
-                        id="address"
-                        placeholder="Votre adresse complète"
-                        value={reservationDetails.deliveryAddress}
-                        onChange={(e) => handleInputChange('deliveryAddress', e.target.value)}
+                        id="phone"
+                        type="tel"
+                        placeholder="+229 XX XX XX XX"
+                        value={reservationDetails.contactPhone}
+                        onChange={(e) => handleInputChange('contactPhone', e.target.value)}
                         className="mt-1"
                       />
                     </div>
-                  )}
 
-                  <div>
-                    <Label htmlFor="requests" className="text-sm">Demandes spéciales (optionnel)</Label>
-                    <textarea
-                      id="requests"
-                      className="w-full p-2 border border-gray-300 rounded-md mt-1 text-sm"
-                      rows={3}
-                      placeholder="Informations supplémentaires..."
-                      value={reservationDetails.specialRequests}
-                      onChange={(e) => handleInputChange('specialRequests', e.target.value)}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Étape 3: Identité */}
-              {currentStep === 3 && (
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="identity-number" className="text-sm">Numéro de pièce d'identité *</Label>
-                    <Input
-                      id="identity-number"
-                      placeholder="Numéro CNI, passeport..."
-                      value={reservationDetails.identityNumber}
-                      onChange={(e) => handleInputChange('identityNumber', e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="identity-doc" className="text-sm">Document d'identité *</Label>
-                    <div className="mt-2">
-                      <input
-                        id="identity-doc"
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
-                      <div 
-                        onClick={() => document.getElementById('identity-doc')?.click()}
-                        className={cn(
-                          "border-2 border-dashed rounded-lg p-4 sm:p-6 text-center cursor-pointer transition-colors",
-                          reservationDetails.identityDocument 
-                            ? "border-green-300 bg-green-50" 
-                            : "border-gray-300 bg-gray-50 hover:bg-gray-100"
-                        )}
+                    <div>
+                      <Label htmlFor="delivery">Méthode de récupération *</Label>
+                      <Select
+                        value={reservationDetails.deliveryMethod}
+                        onValueChange={(value) => handleInputChange('deliveryMethod', value)}
                       >
-                        {reservationDetails.identityDocument ? (
-                          <>
-                            <CheckCircle className="h-6 w-6 text-green-600 mb-1 mx-auto" />
-                            <p className="text-sm text-green-700 truncate px-2">
-                              {reservationDetails.identityDocument.name}
-                            </p>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="h-6 w-6 text-gray-400 mb-1 mx-auto" />
-                            <p className="text-sm text-gray-600">Cliquez pour télécharger</p>
-                            <p className="text-xs text-gray-500 mt-1">PNG, JPG - Max 5MB</p>
-                          </>
-                        )}
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pickup">Récupération sur place</SelectItem>
+                          <SelectItem value="delivery">Livraison</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {reservationDetails.deliveryMethod === 'delivery' && (
+                      <div>
+                        <Label htmlFor="address">Adresse de livraison *</Label>
+                        <Input
+                          id="address"
+                          placeholder="Votre adresse complète"
+                          value={reservationDetails.deliveryAddress}
+                          onChange={(e) => handleInputChange('deliveryAddress', e.target.value)}
+                          className="mt-1"
+                        />
                       </div>
+                    )}
+
+                    <div>
+                      <Label htmlFor="requests">Demandes spéciales (optionnel)</Label>
+                      <textarea
+                        id="requests"
+                        className="w-full mt-1 p-2 border rounded-md min-h-[100px]"
+                        placeholder="Avez-vous des demandes particulières ?"
+                        value={reservationDetails.specialRequests}
+                        onChange={(e) => handleInputChange('specialRequests', e.target.value)}
+                      />
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Étape 4: Paiement KakiaPay */}
-              {currentStep === 4 && (
-                <div className="space-y-4 sm:space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4">Paiement sécurisé</h3>
-                    
-                    {/* Info paiement */}
-                    <Card className="bg-blue-50 border-blue-200 mb-4">
-                      <CardContent className="p-3 sm:p-4">
-                        <div className="flex items-center mb-2">
-                          <CreditCard className="h-5 w-5 text-blue-600 mr-2" />
-                          <span className="text-sm font-medium text-blue-800">Paiement via KakiaPay</span>
+            {/* Étape 3: Vérification d'identité */}
+            {currentStep === 3 && (
+              <div className="space-y-4 sm:space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Vérification d'identité</h3>
+                  
+                  <Alert className="mb-4 border-blue-200 bg-blue-50">
+                    <Info className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-700 text-sm">
+                      Pour votre sécurité et celle du propriétaire, nous demandons une pièce d'identité.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="idNumber">Numéro de pièce d'identité *</Label>
+                      <Input
+                        id="idNumber"
+                        placeholder="Ex: CI123456789"
+                        value={reservationDetails.identityNumber}
+                        onChange={(e) => handleInputChange('identityNumber', e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Document d'identité (optionnel)</Label>
+                      <Input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={handleFileChange}
+                        className="hidden"
+                        id="identity-upload"
+                      />
+                      <label htmlFor="identity-upload">
+                        <div className={cn(
+                          "mt-2 border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all",
+                          reservationDetails.identityDocument
+                            ? "border-green-300 bg-green-50" 
+                            : "border-gray-300 bg-gray-50 hover:bg-gray-100"
+                        )}>
+                          {reservationDetails.identityDocument ? (
+                            <>
+                              <CheckCircle className="h-6 w-6 text-green-600 mb-1 mx-auto" />
+                              <p className="text-sm text-green-700 truncate px-2">
+                                {reservationDetails.identityDocument.name}
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-6 w-6 text-gray-400 mb-1 mx-auto" />
+                              <p className="text-sm text-gray-600">Cliquez pour télécharger</p>
+                              <p className="text-xs text-gray-500 mt-1">PNG, JPG, PDF - Max 5MB</p>
+                            </>
+                          )}
                         </div>
-                        <p className="text-xs text-blue-700">
-                          Paiement sécurisé par carte bancaire, Mobile Money ou autres moyens de paiement.
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Étape 4: Confirmation (SANS PAIEMENT) */}
+            {currentStep === 4 && (
+              <div className="space-y-4 sm:space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Confirmer la réservation</h3>
+                  
+                  {/* Info sans paiement */}
+                  <Card className="bg-amber-50 border-amber-200 mb-4">
+                    <CardContent className="p-3 sm:p-4">
+                      <div className="flex items-center mb-2">
+                        <Info className="h-5 w-5 text-amber-600 mr-2" />
+                        <span className="text-sm font-medium text-amber-800">Paiement à la livraison</span>
+                      </div>
+                      <p className="text-xs text-amber-700">
+                        Le paiement sera effectué directement auprès du propriétaire lors de la récupération de l'équipement.
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  {/* Récapitulatif */}
+                  <Card className="mb-4">
+                    <CardContent className="p-4">
+                      <h4 className="font-semibold mb-3">Récapitulatif</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Équipement</span>
+                          <span className="font-medium">{validEquipment.title}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Période</span>
+                          <span className="font-medium">
+                            {feeCalculations.numberOfDays} jour{feeCalculations.numberOfDays > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Du</span>
+                          <span className="font-medium">{safeFormatDate(selectedStartDate)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Au</span>
+                          <span className="font-medium">{safeFormatDate(selectedEndDate)}</span>
+                        </div>
+                        <Separator className="my-2" />
+                        <div className="flex justify-between text-base font-bold text-emerald-700">
+                          <span>Montant total</span>
+                          <span>{safeToLocaleString(feeCalculations.totalWithFees)} FCFA</span>
+                        </div>
+                        <p className="text-xs text-amber-600 mt-2">
+                          💡 À régler au propriétaire lors de la remise du matériel
                         </p>
+                      </div>
                       </CardContent>
                     </Card>
 
@@ -818,123 +902,86 @@ function ReservationModal({
                         className="mt-0.5"
                       />
                       <Label htmlFor="terms" className="text-sm leading-relaxed">
-                        J'accepte les <span className="text-blue-600 underline cursor-pointer">conditions générales</span>
+                        J'accepte les <span className="text-blue-600 underline cursor-pointer">conditions générales</span> et je m'engage à payer le montant convenu lors de la récupération
                       </Label>
                     </div>
 
-                    {/* Widget KakiaPay */}
-                    {reservationDetails.acceptTerms && !paymentCompleted && (
-                      <div>
-                        <Button
-                          onClick={() => {
-                            // Fermer le modal avant d'ouvrir KakiaPay
-                            onClose();
-                            // Petit délai pour s'assurer que le modal est fermé
-                            setTimeout(() => {
-                              // Ouvrir KakiaPay ici ou via un autre mécanisme
-                              handleOpenKakiaPay();
-                            }, 300);
-                          }}
-                          className="w-full"
-                          size="lg"
-                        >
-                          <CreditCard className="mr-2 h-5 w-5" />
-                          Payer {safeToLocaleString(feeCalculations.totalWithFees)} FCFA
-                        </Button>
-                      </div>
-                    )}
-
-                    {paymentCompleted && (
-                      <Alert className="border-green-200 bg-green-50">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <AlertDescription className="text-green-700 text-sm">
-                          Paiement validé ! Création de votre réservation...
-                        </AlertDescription>
-                      </Alert>
-                    )}
+                    {/* Bouton de confirmation */}
+                    <Button
+                      onClick={nextStep}
+                      disabled={!reservationDetails.acceptTerms || isSubmitting}
+                      className="w-full"
+                      size="lg"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Clock className="mr-2 h-5 w-5 animate-spin" />
+                          Création en cours...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="mr-2 h-5 w-5" />
+                          Confirmer la réservation
+                        </>
+                      )}
+                    </Button>
                   </div>
-                </div>
-              )}
-              
-              {/* Étape 5: Récapitulatif */}
-              {currentStep === 5 && (
-                <div className="space-y-4 sm:space-y-6">
-                  <Card className="bg-gray-50">
-                    <CardContent className="p-3 sm:p-4">
-                      <h4 className="font-medium mb-3 text-sm sm:text-base">Récapitulatif</h4>
-                      <div className="space-y-2 text-xs sm:text-sm">
-                        <div className="flex justify-between">
-                          <span>Équipement:</span>
-                          <span className="font-medium text-right truncate ml-2">{validEquipment.title}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Période:</span>
-                          <span className="text-right">
-                            {safeFormatDate(selectedStartDate, 'short')} - {safeFormatDate(selectedEndDate, 'short')}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Durée:</span>
-                          <span>{calculateDays(selectedStartDate, selectedEndDate)} jour(s)</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card className="bg-blue-50 border-blue-200">
-                    <CardContent className="p-3 sm:p-4">
-                      <h4 className="font-medium mb-3 text-sm sm:text-base">Détail des coûts</h4>
-                      <div className="space-y-2 text-xs sm:text-sm">
-                        <div className="flex justify-between">
-                          <span>Coût de location:</span>
-                          <span>{safeToLocaleString(feeCalculations.baseCost)} FCFA</span>
-                        </div>
-                        <div className="flex justify-between text-orange-600">
-                          <span>Commission (5%):</span>
-                          <span>+ {safeToLocaleString(feeCalculations.commissionAmount)} FCFA</span>
-                        </div>
-                        <Separator />
-                        <div className="flex justify-between font-medium text-sm sm:text-lg">
-                          <span>Total payé:</span>
-                          <span className="text-green-600">
-                            {safeToLocaleString(feeCalculations.totalWithFees)} FCFA
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
 
-                  {isSubmitting && (
-                    <Alert className="border-blue-200 bg-blue-50">
-                      <Clock className="h-4 w-4 text-blue-600 animate-spin" />
-                      <AlertDescription className="text-blue-700 text-sm">
-                        Création de votre réservation en cours...
+                  {/* PAIEMENT - Widget KakiaPay commenté */}
+                  {/* 
+                  {reservationDetails.acceptTerms && !paymentCompleted && (
+                    <div>
+                      <Button
+                        onClick={() => {
+                          onClose();
+                          setTimeout(() => {
+                            handleOpenKakiaPay();
+                          }, 300);
+                        }}
+                        className="w-full"
+                        size="lg"
+                      >
+                        <CreditCard className="mr-2 h-5 w-5" />
+                        Payer {safeToLocaleString(feeCalculations.totalWithFees)} FCFA
+                      </Button>
+                    </div>
+                  )}
+
+                  {paymentCompleted && (
+                    <Alert className="border-green-200 bg-green-50">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <AlertDescription className="text-green-700 text-sm">
+                        Paiement validé ! Création de votre réservation...
                       </AlertDescription>
                     </Alert>
                   )}
+                  */}
                 </div>
-              )}
-            </div>
+            )}
           </div>
 
-          {/* Navigation */}
-          <div className="shrink-0 p-3 sm:p-6 border-t bg-white">
-            <div className="flex justify-between">
+          {/* Footer avec boutons */}
+          <div className="shrink-0 border-t bg-gray-50 p-4 sm:p-6 flex justify-between gap-3">
+            {currentStep > 1 && (
               <Button
+                onClick={prevStep}
                 variant="outline"
-                onClick={currentStep === 1 ? onClose : prevStep}
                 disabled={isSubmitting}
-                size="sm"
+                className="flex-1"
               >
-                {currentStep === 1 ? 'Annuler' : 'Précédent'}
+                Précédent
               </Button>
-              
-              {currentStep < 4 && (
-                <Button onClick={nextStep} disabled={isSubmitting} size="sm">
-                  Suivant
-                </Button>
-              )}
-            </div>
+            )}
+            
+            {currentStep < 4 && (
+              <Button
+                onClick={nextStep}
+                disabled={isSubmitting}
+                className="flex-1 ml-auto"
+              >
+                Suivant
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>
@@ -942,4 +989,5 @@ function ReservationModal({
   );
 }
 
+// Export par défaut pour compatibilité avec les imports existants
 export default ReservationModal;

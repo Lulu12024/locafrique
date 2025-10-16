@@ -1,5 +1,5 @@
 // src/components/booking/BookingApprovalCard.tsx
-// VERSION SIMPLIFIÉE : Paiement KakiaPay direct + Pas de contrat + Email au propriétaire
+// VERSION NOUVELLE : 3 actions (Accepter, Refuser, Proposer autre date)
 
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Calendar } from '@/components/ui/calendar';
+import { Label } from '@/components/ui/label';
 import { 
   CheckCircle, 
   XCircle, 
@@ -15,10 +18,11 @@ import {
   User, 
   Phone, 
   MapPin,
-  Calendar,
+  Calendar as CalendarIcon,
   DollarSign,
   Mail,
-  Loader2
+  Loader2,
+  CalendarRange
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -32,89 +36,70 @@ interface BookingApprovalCardProps {
 
 export function BookingApprovalCard({ booking, onStatusChange }: BookingApprovalCardProps) {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [actionType, setActionType] = useState<'approve' | 'reject' | null>(null);
+  const [actionType, setActionType] = useState<'approve' | 'reject' | 'propose' | null>(null);
+  const [showProposeModal, setShowProposeModal] = useState(false);
+  const [proposedStartDate, setProposedStartDate] = useState<Date | undefined>();
+  const [proposedEndDate, setProposedEndDate] = useState<Date | undefined>();
 
-  // ✅ Approuver la réservation (SIMPLIFIÉ - SANS CONTRAT)
+  // ✅ ACCEPTER LA RÉSERVATION
   const handleApprove = async () => {
     setIsProcessing(true);
     setActionType('approve');
 
     try {
-      console.log('🟢 Approbation de la réservation:', booking.id);
+      console.log('✅ Acceptation de la réservation:', booking.id);
 
-      // 1. Mettre à jour le statut de la réservation
+      // 1. Mettre à jour le statut à "confirmed"
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
-          status: 'confirmed', // ✅ Directement "confirmed" car déjà payé
+          status: 'approved', // ✅ CORRECTION: 'approved' au lieu de 'confirmed'
           approved_at: new Date().toISOString(),
           owner_approval: true
         })
         .eq('id', booking.id);
 
-      if (updateError) {
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
-      // 2. Calculer et enregistrer la commission (5%)
-      const commission = booking.total_price * 0.05;
-      console.log('💰 Commission calculée:', commission, 'FCFA');
-
-      // 3. Créer les notifications in-app
-      const notifications = [
-        // Notification pour le propriétaire
-        {
-          user_id: booking.equipment?.owner_id,
-          type: 'booking_confirmed',
-          title: '✅ Réservation confirmée',
-          message: `Vous avez confirmé la réservation de "${booking.equipment?.title}". Le locataire sera notifié.`,
-          booking_id: booking.id
-        },
-        // Notification pour le locataire
-        {
+      // 2. Créer notification pour le locataire
+      const { error: notifError } = await supabase
+        .from('notifications')
+        .insert({
           user_id: booking.renter_id,
           type: 'booking_confirmed',
-          title: '🎉 Réservation confirmée !',
-          message: `Votre réservation pour "${booking.equipment?.title}" a été confirmée par le propriétaire.`,
-          booking_id: booking.id
-        }
-      ];
-
-      await supabase.from('notifications').insert(notifications);
-
-      // 4. Envoyer les emails de confirmation
-      try {
-        const { error: emailError } = await supabase.functions.invoke('send-booking-confirmation-email', {
-          body: {
-            booking_id: booking.id,
-            equipment_title: booking.equipment?.title,
-            renter_email: booking.renter?.email,
-            owner_email: booking.equipment?.owner?.email
-          }
+          title: 'Réservation confirmée',
+          message: `Votre demande pour "${booking.equipment?.title}" a été acceptée. Vous pouvez contacter le propriétaire pour finaliser.`,
+          booking_id: booking.id,
+          read: false
         });
 
-        if (emailError) {
-          console.error('⚠️ Erreur envoi email:', emailError);
-        } else {
-          console.log('✅ Emails de confirmation envoyés');
-        }
+      if (notifError) console.error('Erreur notification:', notifError);
+
+      // 3. Envoyer email au propriétaire avec infos complètes du locataire
+      try {
+        await supabase.functions.invoke('send-booking-accepted-email', {
+          body: {
+            booking_id: booking.id
+          }
+        });
       } catch (emailError) {
         console.error('⚠️ Erreur envoi email:', emailError);
       }
 
       toast({
-        title: "🎉 Réservation confirmée !",
-        description: "La réservation a été confirmée avec succès. Commission de 5% prélevée.",
+        title: "✅ Réservation acceptée",
+        description: "Le locataire a été notifié. Vous avez reçu ses coordonnées par email.",
         duration: 5000
       });
 
-      onStatusChange();
+      // ✅ IMPORTANT: Recharger les données
+      await onStatusChange();
 
     } catch (error: any) {
-      console.error('❌ Erreur confirmation:', error);
+      console.error('❌ Erreur:', error);
       toast({
-        title: "Erreur de confirmation",
-        description: error.message || "Une erreur s'est produite lors de la confirmation.",
+        title: "Erreur",
+        description: error.message || "Impossible d'accepter la réservation",
         variant: "destructive"
       });
     } finally {
@@ -123,15 +108,15 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     }
   };
 
-  // ✅ Refuser la réservation avec REMBOURSEMENT KAKIAPAY
+  // ❌ REFUSER LA RÉSERVATION
   const handleReject = async () => {
     setIsProcessing(true);
     setActionType('reject');
 
     try {
-      console.log('🔴 Refus de la réservation:', booking.id);
+      console.log('❌ Refus de la réservation:', booking.id);
 
-      // 1. Mettre à jour le statut
+      // 1. Mettre à jour le statut à "rejected"
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
@@ -141,93 +126,112 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
         })
         .eq('id', booking.id);
 
-      if (updateError) {
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
-      // 2. ✅ Déclencher le remboursement KakiaPay (si payé)
-      if (booking.payment_status === 'paid') {
-        console.log('💸 Déclenchement du remboursement KakiaPay...');
-        
-        try {
-          const { data: refundData, error: refundError } = await supabase.functions.invoke('refund-kakiapay-payment', {
-            body: {
-              booking_id: booking.id,
-              amount: booking.total_price,
-              reason: 'Réservation refusée par le propriétaire'
-            }
-          });
-
-          if (refundError) {
-            console.error('❌ Erreur remboursement:', refundError);
-            toast({
-              title: "Réservation refusée",
-              description: "Réservation refusée mais erreur lors du remboursement. Le support va traiter le remboursement manuellement.",
-              variant: "destructive"
-            });
-          } else {
-            console.log('✅ Remboursement KakiaPay initié');
-            
-            // Mettre à jour le statut de paiement
-            await supabase
-              .from('bookings')
-              .update({ payment_status: 'refunded' })
-              .eq('id', booking.id);
-          }
-        } catch (refundError) {
-          console.error('❌ Erreur remboursement:', refundError);
-        }
-      }
-
-      // 3. Créer les notifications
-      const notifications = [
-        {
-          user_id: booking.equipment?.owner_id,
-          type: 'booking_rejected_by_owner',
-          title: '❌ Réservation refusée',
-          message: `Vous avez refusé la réservation de "${booking.equipment?.title}".`,
-          booking_id: booking.id
-        },
-        {
+      // 2. Créer notification pour le locataire
+      await supabase
+        .from('notifications')
+        .insert({
           user_id: booking.renter_id,
           type: 'booking_rejected',
-          title: '😞 Réservation refusée',
-          message: `Le propriétaire a refusé votre demande de réservation pour "${booking.equipment?.title}". ${booking.payment_status === 'paid' ? 'Le remboursement sera traité sous 3-5 jours ouvrables.' : ''}`,
-          booking_id: booking.id
-        }
-      ];
+          title: 'Réservation refusée',
+          message: `Votre demande pour "${booking.equipment?.title}" a été refusée par le propriétaire.`,
+          booking_id: booking.id,
+          read: false
+        });
 
-      await supabase.from('notifications').insert(notifications);
-
-      // 4. Envoyer email de refus au locataire
+      // 3. Envoyer email de refus
       try {
-        await supabase.functions.invoke('send-booking-rejection-email', {
+        await supabase.functions.invoke('send-booking-rejected-email', {
           body: {
-            booking_id: booking.id,
-            equipment_title: booking.equipment?.title,
-            renter_email: booking.renter?.email,
-            refund_amount: booking.total_price
+            booking_id: booking.id
           }
         });
       } catch (emailError) {
-        console.error('⚠️ Erreur envoi email de refus:', emailError);
+        console.error('⚠️ Erreur envoi email:', emailError);
       }
 
       toast({
         title: "Réservation refusée",
-        description: booking.payment_status === 'paid' 
-          ? "Réservation refusée. Le locataire sera remboursé sous 3-5 jours."
-          : "Réservation refusée avec succès.",
+        description: "Le locataire a été notifié du refus.",
         duration: 5000
       });
 
-      onStatusChange();
+      // ✅ IMPORTANT: Recharger les données
+      await onStatusChange();
 
     } catch (error: any) {
-      console.error('❌ Erreur refus:', error);
+      console.error('❌ Erreur:', error);
       toast({
-        title: "Erreur de refus",
-        description: error.message || "Une erreur s'est produite lors du refus.",
+        title: "Erreur",
+        description: error.message || "Impossible de refuser la réservation",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+      setActionType(null);
+    }
+  };
+
+  // 📅 PROPOSER UNE AUTRE DATE
+  const handleProposeDate = () => {
+    setShowProposeModal(true);
+  };
+
+  const submitProposedDates = async () => {
+    if (!proposedStartDate || !proposedEndDate) {
+      toast({
+        title: "Dates requises",
+        description: "Veuillez sélectionner les deux dates",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    setActionType('propose');
+
+    try {
+      // Créer notification pour le locataire avec les nouvelles dates
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: booking.renter_id,
+          type: 'date_proposal',
+          title: 'Proposition de nouvelles dates',
+          message: `Le propriétaire propose du ${format(proposedStartDate, 'dd/MM/yyyy')} au ${format(proposedEndDate, 'dd/MM/yyyy')} pour "${booking.equipment?.title}".`,
+          booking_id: booking.id,
+          read: false
+        });
+
+      // Envoyer email avec proposition
+      try {
+        await supabase.functions.invoke('send-date-proposal-email', {
+          body: {
+            booking_id: booking.id,
+            proposed_start_date: proposedStartDate.toISOString(),
+            proposed_end_date: proposedEndDate.toISOString()
+          }
+        });
+      } catch (emailError) {
+        console.error('⚠️ Erreur envoi email:', emailError);
+      }
+
+      toast({
+        title: "Proposition envoyée",
+        description: "Le locataire a reçu votre proposition de dates.",
+        duration: 5000
+      });
+
+      setShowProposeModal(false);
+      setProposedStartDate(undefined);
+      setProposedEndDate(undefined);
+
+    } catch (error: any) {
+      console.error('❌ Erreur:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'envoyer la proposition",
         variant: "destructive"
       });
     } finally {
@@ -237,171 +241,221 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
   };
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">
-            Demande de réservation
-          </CardTitle>
-          <Badge variant={
-            booking.status === 'pending' ? 'secondary' : 
-            booking.status === 'confirmed' ? 'default' : 
-            'destructive'
-          }>
-            {booking.status === 'pending' ? 'En attente' : 
-             booking.status === 'confirmed' ? 'Confirmée' : 
-             'Refusée'}
-          </Badge>
-        </div>
-      </CardHeader>
+    <>
+      <Card className="w-full">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">
+              Demande de réservation
+            </CardTitle>
+            <Badge variant={
+              booking.status === 'pending' ? 'secondary' : 
+              booking.status === 'approved' ? 'default' : 
+              'destructive'
+            }>
+              {booking.status === 'pending' ? 'En attente' : 
+               booking.status === 'approved' ? 'Approuvée' : 
+               'Refusée'}
+            </Badge>
+          </div>
+        </CardHeader>
 
-      <CardContent className="space-y-4">
-        {/* Informations du locataire */}
-        <div className="flex items-start space-x-3">
-          <Avatar className="h-12 w-12">
-            <AvatarImage src={booking.renter?.avatar_url} />
-            <AvatarFallback>
-              {booking.renter?.first_name?.[0]}{booking.renter?.last_name?.[0]}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <h4 className="font-medium">
-              {booking.renter?.first_name} {booking.renter?.last_name}
-            </h4>
-            <div className="flex items-center text-sm text-gray-600 mt-1">
-              <Mail className="h-3 w-3 mr-1" />
-              {booking.renter?.email}
-            </div>
-            {booking.contact_phone && (
-              <div className="flex items-center text-sm text-gray-600">
-                <Phone className="h-3 w-3 mr-1" />
-                {booking.contact_phone}
+        <CardContent className="space-y-4">
+          {/* Informations du locataire */}
+          <div className="flex items-start space-x-3">
+            <Avatar className="h-12 w-12">
+              <AvatarImage src={booking.renter?.avatar_url} />
+              <AvatarFallback>
+                {booking.renter?.first_name?.[0]}{booking.renter?.last_name?.[0]}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <h4 className="font-semibold">
+                {booking.renter?.first_name} {booking.renter?.last_name}
+              </h4>
+              <div className="flex items-center text-sm text-gray-600 mt-1">
+                <Mail className="h-3 w-3 mr-1" />
+                {booking.renter?.email || 'Email non disponible'}
               </div>
-            )}
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Détails de la réservation */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <h5 className="font-medium text-sm text-gray-700 mb-1">Dates</h5>
-            <p className="flex items-center text-sm">
-              <Calendar className="h-3 w-3 mr-1" />
-              {format(new Date(booking.start_date), 'dd MMM', { locale: fr })} - 
-              {format(new Date(booking.end_date), 'dd MMM yyyy', { locale: fr })}
-            </p>
-          </div>
-
-          <div>
-            <h5 className="font-medium text-sm text-gray-700 mb-1">Prix total</h5>
-            <p className="flex items-center text-sm font-semibold text-green-600">
-              <DollarSign className="h-3 w-3 mr-1" />
-              {booking.total_price?.toLocaleString()} FCFA
-            </p>
-          </div>
-
-          <div>
-            <h5 className="font-medium text-sm text-gray-700 mb-1">Statut paiement</h5>
-            <p className="text-sm">
-              <Badge variant={booking.payment_status === 'paid' ? 'default' : 'secondary'}>
-                {booking.payment_status === 'paid' ? '✅ Payé' : '⏳ En attente'}
-              </Badge>
-            </p>
-          </div>
-
-          <div>
-            <h5 className="font-medium text-sm text-gray-700 mb-1">Méthode de paiement</h5>
-            <p className="text-sm">
-              {booking.payment_method === 'card' ? 'Carte bancaire' : 
-               booking.payment_method === 'kakiapay' ? 'KakiaPay' : 
-               'Mobile Money'}
-            </p>
-          </div>
-        </div>
-
-        {/* Méthode de livraison */}
-        {booking.delivery_method && (
-          <div>
-            <h5 className="font-medium text-sm text-gray-700 mb-1">Livraison</h5>
-            <p className="flex items-center text-sm">
-              <MapPin className="h-3 w-3 mr-1" />
-              {booking.delivery_method === 'pickup' ? 'Retrait sur place' : 'Livraison'}
-              {booking.delivery_address && ` - ${booking.delivery_address}`}
-            </p>
-          </div>
-        )}
-
-        {/* Demandes spéciales */}
-        {booking.special_requests && (
-          <div>
-            <h5 className="font-medium text-sm text-gray-700 mb-1">Demandes spéciales</h5>
-            <p className="text-sm bg-gray-50 p-2 rounded">
-              {booking.special_requests}
-            </p>
-          </div>
-        )}
-
-        {/* Actions - Seulement si en attente */}
-        {booking.status === 'pending' && (
-          <div className="flex space-x-3">
-            <Button
-              onClick={handleReject}
-              variant="outline"
-              disabled={isProcessing}
-              className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
-            >
-              {isProcessing && actionType === 'reject' ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Refus...
-                </>
-              ) : (
-                <>
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Refuser
-                </>
+              {booking.contact_phone && (
+                <div className="flex items-center text-sm text-gray-600 mt-1">
+                  <Phone className="h-3 w-3 mr-1" />
+                  {booking.contact_phone}
+                </div>
               )}
-            </Button>
-            
-            <Button
-              onClick={handleApprove}
-              disabled={isProcessing}
-              className="flex-1 bg-green-600 hover:bg-green-700"
-            >
-              {isProcessing && actionType === 'approve' ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Confirmation...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Confirmer
-                </>
-              )}
-            </Button>
-          </div>
-        )}
-
-        {/* Statut confirmé/refusé */}
-        {booking.status !== 'pending' && (
-          <Alert className={booking.status === 'confirmed' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
-            <div className="flex items-center">
-              {booking.status === 'confirmed' ? (
-                <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-600 mr-2" />
-              )}
-              <AlertDescription className={booking.status === 'confirmed' ? 'text-green-700' : 'text-red-700'}>
-                {booking.status === 'confirmed' ? 'Réservation confirmée' : 'Réservation refusée'}
-                {booking.status === 'rejected' && booking.payment_status === 'refunded' && ' • Remboursement en cours'}
-              </AlertDescription>
             </div>
-          </Alert>
-        )}
-      </CardContent>
-    </Card>
+          </div>
+
+          <Separator />
+
+          {/* Détails de la réservation */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h5 className="font-medium text-sm text-gray-700 mb-1">Dates</h5>
+              <div className="flex items-center text-sm">
+                <CalendarIcon className="h-3 w-3 mr-1" />
+                <span>
+                  {format(new Date(booking.start_date), 'dd MMM', { locale: fr })} - 
+                  {format(new Date(booking.end_date), 'dd MMM yyyy', { locale: fr })}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <h5 className="font-medium text-sm text-gray-700 mb-1">Prix total</h5>
+              <p className="text-sm font-semibold text-green-600">
+                {booking.total_price?.toLocaleString()} FCFA
+              </p>
+            </div>
+          </div>
+
+          {/* Méthode de livraison */}
+          {booking.delivery_method && (
+            <div>
+              <h5 className="font-medium text-sm text-gray-700 mb-1">Livraison</h5>
+              <p className="flex items-center text-sm">
+                <MapPin className="h-3 w-3 mr-1" />
+                {booking.delivery_method === 'pickup' ? 'Retrait sur place' : 'Livraison'}
+                {booking.delivery_address && ` - ${booking.delivery_address}`}
+              </p>
+            </div>
+          )}
+
+          {/* Demandes spéciales */}
+          {booking.special_requests && (
+            <div>
+              <h5 className="font-medium text-sm text-gray-700 mb-1">Demandes spéciales</h5>
+              <p className="text-sm bg-gray-50 p-2 rounded">
+                {booking.special_requests}
+              </p>
+            </div>
+          )}
+
+          {/* ✅ ACTIONS : 3 boutons si en attente */}
+          {booking.status === 'pending' && (
+            <div className="space-y-2">
+              <Button
+                onClick={handleApprove}
+                disabled={isProcessing}
+                className="w-full bg-green-600 hover:bg-green-700"
+              >
+                {isProcessing && actionType === 'approve' ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Acceptation...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Accepter la demande
+                  </>
+                )}
+              </Button>
+
+              <Button
+                onClick={handleProposeDate}
+                disabled={isProcessing}
+                variant="outline"
+                className="w-full border-blue-300 text-blue-700 hover:bg-blue-50"
+              >
+                <CalendarRange className="mr-2 h-4 w-4" />
+                Proposer une autre date
+              </Button>
+
+              <Button
+                onClick={handleReject}
+                disabled={isProcessing}
+                variant="outline"
+                className="w-full border-red-300 text-red-700 hover:bg-red-50"
+              >
+                {isProcessing && actionType === 'reject' ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Refus...
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Refuser
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Statut confirmé/refusé */}
+          {booking.status !== 'pending' && (
+            <Alert className={booking.status === 'approved' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+              <div className="flex items-center">
+                {booking.status === 'approved' ? (
+                  <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
+                ) : (
+                  <XCircle className="h-4 w-4 text-red-600 mr-2" />
+                )}
+                <AlertDescription className={booking.status === 'approved' ? 'text-green-700' : 'text-red-700'}>
+                  {booking.status === 'approved' ? 'Réservation approuvée - En cours' : 'Réservation refusée'}
+                </AlertDescription>
+              </div>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Modal pour proposer une autre date */}
+      <Dialog open={showProposeModal} onOpenChange={setShowProposeModal}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Proposer de nouvelles dates</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Date de début proposée</Label>
+              <Calendar
+                mode="single"
+                selected={proposedStartDate}
+                onSelect={setProposedStartDate}
+                className="rounded-md border mt-2"
+                disabled={(date) => date < new Date()}
+              />
+            </div>
+
+            <div>
+              <Label>Date de fin proposée</Label>
+              <Calendar
+                mode="single"
+                selected={proposedEndDate}
+                onSelect={setProposedEndDate}
+                className="rounded-md border mt-2"
+                disabled={(date) => !proposedStartDate || date <= proposedStartDate}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowProposeModal(false)}
+              disabled={isProcessing}
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={submitProposedDates}
+              disabled={isProcessing || !proposedStartDate || !proposedEndDate}
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Envoi...
+                </>
+              ) : (
+                'Envoyer la proposition'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

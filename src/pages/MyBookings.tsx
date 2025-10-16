@@ -5,6 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { RefreshCw } from 'lucide-react'; 
+
 import { 
   Calendar,
   Package,
@@ -96,6 +98,33 @@ export default function MyBookings() {
     }
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // ✅ Écouter les changements en temps réel sur les réservations
+    const subscription = supabase
+      .channel('booking-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Écouter tous les événements (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'bookings',
+          filter: `renter_id=eq.${user.id}` // Uniquement mes réservations
+        },
+        (payload) => {
+          console.log('🔔 Changement détecté sur une réservation:', payload);
+          // Recharger toutes les données
+          loadAllData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user?.id]);
+  
   const loadAllData = async () => {
     setLoading(true);
     setError(null);
@@ -349,7 +378,27 @@ export default function MyBookings() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8">Mes Réservations</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold">Mes Réservations</h1>
+        <Button
+          onClick={loadAllData}
+          disabled={loading}
+          variant="outline"
+          size="sm"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Chargement...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Actualiser
+            </>
+          )}
+        </Button>
+      </div>
 
       {bookings.length === 0 ? (
         <div className="text-center py-12">
