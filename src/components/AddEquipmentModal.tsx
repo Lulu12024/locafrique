@@ -1,6 +1,6 @@
 // src/components/AddEquipmentModal.tsx - Version avec upload d'images
 
-import React, { useState } from "react";
+import React, { useState ,useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,20 @@ import { useEquipments } from "@/hooks/useEquipments";
 import { useStorage } from "@/hooks/useStorage";
 import { EQUIPMENT_CATEGORIES } from "@/data/categories";
 import { Progress } from "@/components/ui/progress";
+import { supabase } from '@/integrations/supabase/client';
 
 interface AddEquipmentModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+interface Category {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+}
+
 
 const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }) => {
   const { addEquipment, isLoading } = useEquipments();
@@ -41,7 +50,32 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [categories, setCategories] = useState<Category[]>([]);
 
+  useEffect(() => {
+    const loadCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, name, description, icon')
+        .order('order', { ascending: true });
+
+      if (error) throw error;
+      setCategories(data || []);
+    } catch (error) {
+      console.error('Erreur chargement catégories:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les catégories",
+        variant: "destructive"
+      });
+    }
+  };
+
+  if (isOpen) {
+      loadCategories();
+    }
+  }, [isOpen]);
   // Gestion de la sélection d'images
   const handleImageSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -252,8 +286,12 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const categoryOptions = Object.entries(EQUIPMENT_CATEGORIES).map(([key, category]) => ({
-    value: key,
+  // const categoryOptions = Object.entries(EQUIPMENT_CATEGORIES).map(([key, category]) => ({
+  //   value: key,
+  //   label: category.name
+  // }));
+  const categoryOptions = categories.map(category => ({
+    value: category.id,
     label: category.name
   }));
 
@@ -515,15 +553,17 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
           </div>
 
           {/* Note sur l'erreur 403 */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
             <div className="flex items-start">
-              <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5 mr-2" />
+              <AlertCircle className="h-6 w-6 text-orange-600 mt-0.5 mr-3 flex-shrink-0" />
               <div className="text-sm">
-                <p className="font-medium text-amber-800">En cas d'erreur 403</p>
-                <p className="text-amber-700 mt-1">
-                  Assurez-vous que votre profil est complet (nom, prénom) et que vous êtes bien connecté.
-                  Cette erreur peut indiquer un problème de permissions sur la base de données.
+                <p className="font-bold text-orange-900 text-base mb-2">
+                  ⚠️ Avertissement Important
                 </p>
+                <p className="text-orange-800 font-medium leading-relaxed">
+                  En publiant une annonce, vous reconnaissez être seul responsable de vos transactions et de la remise du bien.
+                </p>
+                
               </div>
             </div>
           </div>

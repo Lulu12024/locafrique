@@ -1,5 +1,5 @@
 // src/components/booking/BookingApprovalCard.tsx
-// VERSION NOUVELLE : 3 actions (Accepter, Refuser, Proposer autre date)
+// VERSION CORRIGÉE avec rechargement du statut
 
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,28 +38,39 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionType, setActionType] = useState<'approve' | 'reject' | 'propose' | null>(null);
   const [showProposeModal, setShowProposeModal] = useState(false);
+  const [showConfirmApprovalModal, setShowConfirmApprovalModal] = useState(false); // ✅ NOUVEAU
   const [proposedStartDate, setProposedStartDate] = useState<Date | undefined>();
   const [proposedEndDate, setProposedEndDate] = useState<Date | undefined>();
 
-  // ✅ ACCEPTER LA RÉSERVATION
-  const handleApprove = async () => {
+  // ✅ ACCEPTER LA RÉSERVATION - Afficher d'abord le modal de confirmation
+  const handleApproveClick = () => {
+    setShowConfirmApprovalModal(true);
+  };
+
+  const handleApproveConfirmed = async () => {
+    setShowConfirmApprovalModal(false);
     setIsProcessing(true);
     setActionType('approve');
 
     try {
-      console.log('✅ Acceptation de la réservation:', booking.id);
+      console.log('✅ Démarrage acceptation de la réservation:', booking.id);
 
-      // 1. Mettre à jour le statut à "confirmed"
+      // 1. Mettre à jour le statut avec 'confirmed' (pas 'approved')
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
-          status: 'approved', // ✅ CORRECTION: 'approved' au lieu de 'confirmed'
+          status: 'confirmed',  // ✅ CORRECTION: 'confirmed' au lieu de 'approved'
           approved_at: new Date().toISOString(),
           owner_approval: true
         })
         .eq('id', booking.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('❌ Erreur lors de l\'update:', updateError);
+        throw updateError;
+      }
+
+      console.log('✅ Statut mis à jour avec succès');
 
       // 2. Créer notification pour le locataire
       const { error: notifError } = await supabase
@@ -68,35 +79,37 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
           user_id: booking.renter_id,
           type: 'booking_confirmed',
           title: 'Réservation confirmée',
-          message: `Votre demande pour "${booking.equipment?.title}" a été acceptée. Vous pouvez contacter le propriétaire pour finaliser.`,
+          message: `Votre demande pour "${booking.equipment?.title}" a été acceptée.`,
           booking_id: booking.id,
           read: false
         });
 
-      if (notifError) console.error('Erreur notification:', notifError);
+      if (notifError) {
+        console.error('⚠️ Erreur notification:', notifError);
+      }
 
-      // 3. Envoyer email au propriétaire avec infos complètes du locataire
+      // 3. Envoyer email
       try {
         await supabase.functions.invoke('send-booking-accepted-email', {
-          body: {
-            booking_id: booking.id
-          }
+          body: { booking_id: booking.id }
         });
+        console.log('✅ Email envoyé');
       } catch (emailError) {
-        console.error('⚠️ Erreur envoi email:', emailError);
+        console.error('⚠️ Erreur email:', emailError);
       }
 
       toast({
         title: "✅ Réservation acceptée",
-        description: "Le locataire a été notifié. Vous avez reçu ses coordonnées par email.",
+        description: "Le locataire a été notifié.",
         duration: 5000
       });
 
-      // ✅ IMPORTANT: Recharger les données
+      console.log('✅ Appel de onStatusChange()');
+      // ✅ Recharger les données
       await onStatusChange();
 
     } catch (error: any) {
-      console.error('❌ Erreur:', error);
+      console.error('❌ Erreur complète:', error);
       toast({
         title: "Erreur",
         description: error.message || "Impossible d'accepter la réservation",
@@ -114,9 +127,9 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     setActionType('reject');
 
     try {
-      console.log('❌ Refus de la réservation:', booking.id);
+      console.log('❌ Démarrage refus de la réservation:', booking.id);
 
-      // 1. Mettre à jour le statut à "rejected"
+      // 1. Mettre à jour le statut (sans .select() pour éviter erreur RLS)
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
@@ -126,42 +139,51 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
         })
         .eq('id', booking.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('❌ Erreur lors de l\'update:', updateError);
+        throw updateError;
+      }
 
-      // 2. Créer notification pour le locataire
-      await supabase
+      console.log('✅ Statut mis à jour avec succès');
+
+      // 2. Créer notification
+      const { error: notifError } = await supabase
         .from('notifications')
         .insert({
           user_id: booking.renter_id,
           type: 'booking_rejected',
           title: 'Réservation refusée',
-          message: `Votre demande pour "${booking.equipment?.title}" a été refusée par le propriétaire.`,
+          message: `Votre demande pour "${booking.equipment?.title}" a été refusée.`,
           booking_id: booking.id,
           read: false
         });
 
-      // 3. Envoyer email de refus
+      if (notifError) {
+        console.error('⚠️ Erreur notification:', notifError);
+      }
+
+      // 3. Envoyer email
       try {
         await supabase.functions.invoke('send-booking-rejected-email', {
-          body: {
-            booking_id: booking.id
-          }
+          body: { booking_id: booking.id }
         });
+        console.log('✅ Email envoyé');
       } catch (emailError) {
-        console.error('⚠️ Erreur envoi email:', emailError);
+        console.error('⚠️ Erreur email:', emailError);
       }
 
       toast({
         title: "Réservation refusée",
-        description: "Le locataire a été notifié du refus.",
+        description: "Le locataire a été notifié.",
         duration: 5000
       });
 
-      // ✅ IMPORTANT: Recharger les données
+      console.log('✅ Appel de onStatusChange()');
+      // ✅ Recharger les données
       await onStatusChange();
 
     } catch (error: any) {
-      console.error('❌ Erreur:', error);
+      console.error('❌ Erreur complète:', error);
       toast({
         title: "Erreur",
         description: error.message || "Impossible de refuser la réservation",
@@ -192,7 +214,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     setActionType('propose');
 
     try {
-      // Créer notification pour le locataire avec les nouvelles dates
+      // Créer notification
       await supabase
         .from('notifications')
         .insert({
@@ -204,7 +226,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
           read: false
         });
 
-      // Envoyer email avec proposition
+      // Envoyer email
       try {
         await supabase.functions.invoke('send-date-proposal-email', {
           body: {
@@ -214,12 +236,12 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
           }
         });
       } catch (emailError) {
-        console.error('⚠️ Erreur envoi email:', emailError);
+        console.error('⚠️ Erreur email:', emailError);
       }
 
       toast({
         title: "Proposition envoyée",
-        description: "Le locataire a reçu votre proposition de dates.",
+        description: "Le locataire a reçu votre proposition.",
         duration: 5000
       });
 
@@ -240,22 +262,29 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     }
   };
 
+  // ✅ VÉRIFIER LE STATUT ACTUEL
+  const isPending = booking.status === 'pending';
+  const isConfirmed = booking.status === 'confirmed';  // ✅ 'confirmed' au lieu de 'approved'
+  const isRejected = booking.status === 'rejected';
+
   return (
     <>
       <Card className="w-full">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">
-              Demande de réservation
+              {booking.equipment?.title || 'Équipement'}
             </CardTitle>
             <Badge variant={
               booking.status === 'pending' ? 'secondary' : 
-              booking.status === 'approved' ? 'default' : 
-              'destructive'
+              booking.status === 'confirmed' ? 'default' :   // ✅ Vérifier le statut réel
+              booking.status === 'rejected' ? 'destructive' : 
+              'secondary'
             }>
-              {booking.status === 'pending' ? 'En attente' : 
-               booking.status === 'approved' ? 'Approuvée' : 
-               'Refusée'}
+              {booking.status === 'pending' ? '⏳ En attente' : 
+               booking.status === 'confirmed' ? '✅ Confirmée' :   // ✅ Vérifier le statut réel
+               booking.status === 'rejected' ? '❌ Refusée' : 
+               booking.status}
             </Badge>
           </div>
         </CardHeader>
@@ -331,18 +360,18 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
             </div>
           )}
 
-          {/* ✅ ACTIONS : 3 boutons si en attente */}
-          {booking.status === 'pending' && (
+          {/* ✅ ACTIONS : Affichage conditionnel selon le statut */}
+          {isPending && (
             <div className="space-y-2">
               <Button
-                onClick={handleApprove}
+                onClick={handleApproveClick}  // ✅ Ouvre le modal de confirmation
                 disabled={isProcessing}
                 className="w-full bg-green-600 hover:bg-green-700"
               >
                 {isProcessing && actionType === 'approve' ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Acceptation...
+                    Acceptation en cours...
                   </>
                 ) : (
                   <>
@@ -371,7 +400,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
                 {isProcessing && actionType === 'reject' ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Refus...
+                    Refus en cours...
                   </>
                 ) : (
                   <>
@@ -383,23 +412,94 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
             </div>
           )}
 
-          {/* Statut confirmé/refusé */}
-          {booking.status !== 'pending' && (
-            <Alert className={booking.status === 'approved' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+          {/* Statut confirmé */}
+          {isConfirmed && (
+            <Alert className="border-green-200 bg-green-50">
               <div className="flex items-center">
-                {booking.status === 'approved' ? (
-                  <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
-                ) : (
-                  <XCircle className="h-4 w-4 text-red-600 mr-2" />
-                )}
-                <AlertDescription className={booking.status === 'approved' ? 'text-green-700' : 'text-red-700'}>
-                  {booking.status === 'approved' ? 'Réservation approuvée - En cours' : 'Réservation refusée'}
+                <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
+                <AlertDescription className="text-green-700">
+                  ✅ Réservation confirmée - En cours
+                </AlertDescription>
+              </div>
+            </Alert>
+          )}
+
+          {/* Statut refusé */}
+          {isRejected && (
+            <Alert className="border-red-200 bg-red-50">
+              <div className="flex items-center">
+                <XCircle className="h-4 w-4 text-red-600 mr-2" />
+                <AlertDescription className="text-red-700">
+                  ❌ Réservation refusée
                 </AlertDescription>
               </div>
             </Alert>
           )}
         </CardContent>
       </Card>
+
+      {/* ✅ MODAL DE CONFIRMATION AVANT APPROBATION */}
+      <Dialog open={showConfirmApprovalModal} onOpenChange={setShowConfirmApprovalModal}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <AlertDescription className="text-orange-600">⚠️</AlertDescription>
+              <span>Confirmer l'acceptation</span>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <Alert className="border-orange-200 bg-orange-50">
+            <AlertDescription className="text-orange-900 space-y-3">
+              <p className="font-semibold">
+                La plateforme ne gère aucun paiement.
+              </p>
+              <p>
+                Avant de remettre le bien, vérifiez toujours l'identité du locataire et assurez-vous que les conditions de location ont été clairement convenues.
+              </p>
+            </AlertDescription>
+          </Alert>
+
+          <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+            <p className="text-sm font-medium text-gray-700">Récapitulatif de la réservation :</p>
+            <div className="text-sm text-gray-600 space-y-1">
+              <p>• Locataire : <span className="font-medium">{booking.renter?.first_name} {booking.renter?.last_name}</span></p>
+              <p>• Équipement : <span className="font-medium">{booking.equipment?.title}</span></p>
+              <p>• Période : <span className="font-medium">
+                {format(new Date(booking.start_date), 'dd/MM/yyyy')} - {format(new Date(booking.end_date), 'dd/MM/yyyy')}
+              </span></p>
+              <p>• Prix : <span className="font-medium text-green-600">{booking.total_price?.toLocaleString()} FCFA</span></p>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmApprovalModal(false)}
+              disabled={isProcessing}
+              className="w-full sm:w-auto"
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={handleApproveConfirmed}
+              disabled={isProcessing}
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Confirmation...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Oui, j'ai compris et j'accepte
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal pour proposer une autre date */}
       <Dialog open={showProposeModal} onOpenChange={setShowProposeModal}>

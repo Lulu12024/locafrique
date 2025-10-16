@@ -1,3 +1,5 @@
+// src/components/SearchFilters.tsx
+// VERSION COMPLÈTE ET CORRIGÉE
 
 import React, { useState, useEffect } from 'react';
 import { Filter, X, MapPin, Euro } from 'lucide-react';
@@ -8,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useEquipmentSearch } from '@/hooks/useEquipmentSearch';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SearchFiltersProps {
   filters: {
@@ -20,18 +23,13 @@ interface SearchFiltersProps {
   resultsCount: number;
 }
 
-const categories = [
-  'Électronique',
-  'Jardinage',
-  'Bricolage',
-  'Sport',
-  'Automobile',
-  'Musique',
-  'Photo/Vidéo',
-  'Cuisine',
-  'Nettoyage',
-  'Autre'
-];
+interface Category {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  order: number;
+}
 
 export const SearchFilters: React.FC<SearchFiltersProps> = ({
   filters,
@@ -40,29 +38,48 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
 }) => {
   const { fetchCities, fetchPriceRange } = useEquipmentSearch();
   const [cities, setCities] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [priceRange, setPriceRange] = useState({ min: 0, max: 1000 });
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Fonction pour récupérer les catégories depuis Supabase
+  const fetchCategoriesFromDB = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, name, description, icon, order')
+        .order('order', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Erreur chargement catégories:', error);
+      return [];
+    }
+  };
 
   useEffect(() => {
     const loadFilterData = async () => {
       try {
-        const [citiesData, priceData] = await Promise.all([
+        const [citiesData, priceData, categoriesData] = await Promise.all([
           fetchCities(),
-          fetchPriceRange()
+          fetchPriceRange(),
+          fetchCategoriesFromDB()
         ]);
         setCities(citiesData || []);
         setPriceRange(priceData || { min: 0, max: 1000 });
+        setCategories(categoriesData || []);
       } catch (error) {
         console.error('Erreur lors du chargement des filtres:', error);
         setCities([]);
         setPriceRange({ min: 0, max: 1000 });
+        setCategories([]);
       }
     };
     loadFilterData();
   }, [fetchCities, fetchPriceRange]);
 
   const handleFilterChange = (key: string, value: any) => {
-    // Convert "all" values to empty strings for the filter logic
     const filterValue = value === "all-categories" || value === "all-cities" ? "" : value;
     const newFilters = { ...filters, [key]: filterValue };
     onFiltersChange(newFilters);
@@ -134,11 +151,11 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Toutes les catégories" />
             </SelectTrigger>
-            <SelectContent className="bg-white border border-gray-200 shadow-lg">
+            <SelectContent className="bg-white border border-gray-200 shadow-lg max-h-[300px]">
               <SelectItem value="all-categories">Toutes les catégories</SelectItem>
               {categories.map((category) => (
-                <SelectItem key={category} value={category}>
-                  {category}
+                <SelectItem key={category.id} value={category.id}>
+                  {category.name}
                 </SelectItem>
               ))}
             </SelectContent>
