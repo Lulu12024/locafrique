@@ -492,12 +492,26 @@ function ReservationModal({
 
       // ✅ Envoyer l'email au propriétaire
       try {
-        await supabase.functions.invoke('send-booking-notification-email', {
-          body: { booking_id: booking.id }
-        });
-        console.log('✅ Email envoyé au propriétaire');
-      } catch (emailError) {
-        console.error('⚠️ Erreur envoi email:', emailError);
+        console.log('📧 Envoi email au propriétaire via Gmail...');
+        
+        const { data: emailResult, error: emailError } = await supabase.functions.invoke(
+          'send-booking-notification-gmail', // ← Nouvelle fonction Gmail
+          {
+            body: { booking_id: booking.id }
+          }
+        );
+
+        if (emailError) {
+          console.error('⚠️ Erreur envoi email au propriétaire:', emailError);
+          // L'email n'est pas critique, on continue quand même
+        } else if (emailResult?.success) {
+          console.log('✅ Email envoyé avec succès au propriétaire');
+        } else {
+          console.warn('⚠️ Email non envoyé, mais réservation créée');
+        }
+      } catch (emailError: any) {
+        console.error('⚠️ Exception lors de l\'envoi email:', emailError.message);
+        // Ne pas bloquer la réservation si l'email échoue
       }
 
       toast({

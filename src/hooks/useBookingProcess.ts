@@ -96,18 +96,26 @@ export function useBookingProcess() {
 
       // ✅ ENVOYER L'EMAIL AU PROPRIÉTAIRE
       try {
-        const { error: emailError } = await supabase.functions.invoke('send-booking-notification-email', {
-          body: { booking_id: booking.id }
-        });
+        console.log('📧 Tentative d\'envoi email au propriétaire...');
+        
+        const { data: emailResult, error: emailError } = await supabase.functions.invoke(
+          'send-booking-notification-gmail', // ← Nouvelle fonction Gmail
+          {
+            body: { booking_id: booking.id }
+          }
+        );
 
         if (emailError) {
           console.error('⚠️ Erreur envoi email au propriétaire:', emailError);
-          // On continue quand même, l'email n'est pas critique
+          // On continue quand même, l'email n'est pas critique pour le succès de la réservation
+        } else if (emailResult?.success) {
+          console.log('✅ Email envoyé avec succès au propriétaire:', emailResult.message);
         } else {
-          console.log('✅ Email envoyé au propriétaire');
+          console.warn('⚠️ Email non envoyé:', emailResult);
         }
-      } catch (emailError) {
-        console.error('⚠️ Erreur envoi email:', emailError);
+      } catch (emailError: any) {
+        console.error('⚠️ Exception lors de l\'envoi email:', emailError.message);
+        // Ne pas faire échouer la réservation si l'email ne part pas
       }
       
       toast({
