@@ -615,7 +615,11 @@ function ReservationModal({
                     {/* Date de début */}
                     <div>
                       <Label className="text-sm font-medium mb-2 block">Date de début</Label>
-                      <Popover open={isStartDateOpen} onOpenChange={setIsStartDateOpen}>
+                      <Popover 
+                        open={isStartDateOpen} 
+                        onOpenChange={setIsStartDateOpen}
+                        modal={true}  // ✅ AJOUT
+                      >
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
@@ -625,26 +629,39 @@ function ReservationModal({
                             {safeFormatDate(selectedStartDate)}
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
+                        <PopoverContent 
+                          className="w-auto p-0 z-[9999]"  // ✅ z-index très élevé
+                          align="start"
+                          onInteractOutside={(e) => {
+                            // ✅ Empêcher la fermeture automatique
+                            e.preventDefault();
+                          }}
+                        >
                           <Calendar
                             mode="single"
                             selected={selectedStartDate}
                             onSelect={(date) => {
                               if (date) {
                                 setSelectedStartDate(date);
-                                setIsStartDateOpen(false);
+                                setIsStartDateOpen(false);  // Fermer manuellement
                               }
                             }}
                             disabled={(date) => date < new Date()}
+                            initialFocus
                           />
                         </PopoverContent>
                       </Popover>
                     </div>
 
+
                     {/* Date de fin */}
                     <div>
                       <Label className="text-sm font-medium mb-2 block">Date de fin</Label>
-                      <Popover open={isEndDateOpen} onOpenChange={setIsEndDateOpen}>
+                      <Popover 
+                        open={isEndDateOpen} 
+                        onOpenChange={setIsEndDateOpen}
+                        modal={true}  // ✅ AJOUT
+                      >
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
@@ -654,17 +671,25 @@ function ReservationModal({
                             {safeFormatDate(selectedEndDate)}
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
+                        <PopoverContent 
+                          className="w-auto p-0 z-[9999]"  // ✅ z-index très élevé
+                          align="start"
+                          onInteractOutside={(e) => {
+                            // ✅ Empêcher la fermeture automatique
+                            e.preventDefault();
+                          }}
+                        >
                           <Calendar
                             mode="single"
                             selected={selectedEndDate}
                             onSelect={(date) => {
                               if (date) {
                                 setSelectedEndDate(date);
-                                setIsEndDateOpen(false);
+                                setIsEndDateOpen(false);  // Fermer manuellement
                               }
                             }}
                             disabled={(date) => date <= selectedStartDate}
+                            initialFocus
                           />
                         </PopoverContent>
                       </Popover>
