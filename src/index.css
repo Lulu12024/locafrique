@@ -428,3 +428,10 @@
     border-color: #4b5563;
   }
 }
+
+@layer components {
+  .reservation-modal-content {
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+}

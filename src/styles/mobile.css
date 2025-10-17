@@ -78,3 +78,9 @@ select {
     font-size: clamp(1.5rem, 5vw, 2rem);
   }
 }
+@layer components {
+  .reservation-modal-content {
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+}

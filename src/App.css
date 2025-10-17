@@ -40,3 +40,10 @@
 .read-the-docs {
   color: #888;
 }
+
+@layer components {
+  .reservation-modal-content {
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+}

@@ -561,55 +561,59 @@ function ReservationModal({
       onClose();
     }}>
       <DialogContent 
-        className="w-full max-w-lg sm:max-w-2xl lg:max-w-4xl h-[85vh] sm:h-auto max-h-[85vh] p-0 overflow-hidden"
+        className="w-[95vw] max-w-lg sm:max-w-2xl lg:max-w-4xl h-[92vh] p-0 flex flex-col"
       >
         <div className="flex flex-col h-full">
-          <DialogHeader className="shrink-0">
-            <div className="bg-gradient-to-r from-emerald-600 to-blue-600 p-4 sm:p-6 text-white">
-              <DialogTitle className="text-lg sm:text-2xl font-bold flex items-center">
-                <Zap className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
-                Réservation Express
-              </DialogTitle>
-              <p className="text-emerald-100 text-sm sm:text-base mt-1 truncate">
-                {validEquipment.title}
-              </p>
-              
-              {/* Indicateur de progression */}
-              <div className="mt-4 sm:mt-6">
-                <div className="flex items-center justify-between">
-                  {[1, 2, 3, 4].map((step) => (
-                    <div key={step} className="flex items-center">
-                      <div className={cn(
-                        "w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all",
-                        currentStep >= step 
-                          ? "bg-white text-emerald-600" 
-                          : "bg-emerald-500/30 text-white"
-                      )}>
-                        {step}
-                      </div>
-                      {step < 4 && (
+          
+          {/* Header - Fixed - 20% */}
+          <div className="shrink-0">
+            <DialogHeader>
+              <div className="bg-gradient-to-r from-emerald-600 to-blue-600 p-3 sm:p-4 text-white">
+                <DialogTitle className="text-base sm:text-xl font-bold flex items-center">
+                  <Zap className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                  Réservation Express
+                </DialogTitle>
+                <p className="text-emerald-100 text-xs sm:text-sm mt-1 truncate">
+                  {validEquipment.title}
+                </p>
+                
+                {/* Indicateur de progression - COMPACT */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between">
+                    {[1, 2, 3, 4].map((step) => (
+                      <div key={step} className="flex items-center">
                         <div className={cn(
-                          "h-1 w-6 sm:w-16 mx-1 transition-all",
-                          currentStep > step ? "bg-white" : "bg-emerald-500/30"
-                        )} />
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-between mt-2 text-xs">
-                  <span className="text-white/90">Dates</span>
-                  <span className="text-white/90">Contact</span>
-                  <span className="text-white/90">Identité</span>
-                  <span className="text-white/90">OK</span>
+                          "w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold",
+                          currentStep >= step 
+                            ? "bg-white text-emerald-600" 
+                            : "bg-emerald-500/30 text-white"
+                        )}>
+                          {step}
+                        </div>
+                        {step < 4 && (
+                          <div className={cn(
+                            "h-0.5 w-4 sm:w-12 mx-0.5 sm:mx-1",
+                            currentStep > step ? "bg-white" : "bg-emerald-500/30"
+                          )} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between mt-1 text-[10px] sm:text-xs">
+                    <span className="text-white/90">Dates</span>
+                    <span className="text-white/90">Contact</span>
+                    <span className="text-white/90">ID</span>
+                    <span className="text-white/90">OK</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </DialogHeader>
+            </DialogHeader>
+          </div>
 
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-6 sm:py-4">
             {/* Étape 1: Sélection des dates */}
             {currentStep === 1 && (
-              <div className="space-y-4 sm:space-y-6">
+              <div className="space-y-3">
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Sélectionnez vos dates</h3>
                   
@@ -744,7 +748,7 @@ function ReservationModal({
 
             {/* Étape 2: Informations de contact */}
             {currentStep === 2 && (
-              <div className="space-y-4 sm:space-y-6">
+              <div className="space-y-3">
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Informations de contact</h3>
                   
@@ -807,7 +811,7 @@ function ReservationModal({
 
             {/* Étape 3: Vérification d'identité */}
             {currentStep === 3 && (
-              <div className="space-y-4 sm:space-y-6">
+              <div className="space-y-3">
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Vérification d'identité</h3>
                   
@@ -870,7 +874,7 @@ function ReservationModal({
 
             {/* Étape 4: Confirmation (SANS PAIEMENT) */}
             {currentStep === 4 && (
-              <div className="space-y-4 sm:space-y-6">
+              <div className="space-y-3">
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Confirmer la réservation</h3>
                   
@@ -990,27 +994,34 @@ function ReservationModal({
           </div>
 
           {/* Footer avec boutons */}
-          <div className="shrink-0 border-t bg-gray-50 p-3 sm:p-6 flex justify-between gap-3">
-            {currentStep > 1 && (
-              <Button
-                onClick={prevStep}
-                variant="outline"
-                disabled={isSubmitting}
-                className="flex-1"
-              >
-                Précédent
-              </Button>
-            )}
-            
-            {currentStep < 4 && (
-              <Button
-                onClick={nextStep}
-                disabled={isSubmitting}
-                className="flex-1 ml-auto"
-              >
-                Suivant
-              </Button>
-            )}
+          <div className="shrink-0 border-t bg-white p-3 sm:p-4">
+            <div className="flex gap-2">
+              {currentStep > 1 && (
+                <Button
+                  onClick={prevStep}
+                  variant="outline"
+                  disabled={isSubmitting}
+                  className="flex-1 text-sm h-10"
+                  size="sm"
+                >
+                  Précédent
+                </Button>
+              )}
+              
+              {currentStep < 4 && (
+                <Button
+                  onClick={nextStep}
+                  disabled={isSubmitting}
+                  className={cn(
+                    "flex-1 text-sm h-10",
+                    currentStep === 1 && "ml-auto"
+                  )}
+                  size="sm"
+                >
+                  Suivant
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </DialogContent>
