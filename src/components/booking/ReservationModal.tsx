@@ -565,20 +565,22 @@ function ReservationModal({
       >
         <div className="flex flex-col h-full">
           <DialogHeader className="shrink-0">
-            <div className="bg-gradient-to-r from-emerald-600 to-blue-600 p-3 sm:p-6 text-white">
-              <DialogTitle className="text-base sm:text-2xl font-bold flex items-center">
-                <Zap className="mr-2 sm:mr-3 h-4 w-4 sm:h-6 sm:w-6" />
+            <div className="bg-gradient-to-r from-emerald-600 to-blue-600 p-4 sm:p-6 text-white">
+              <DialogTitle className="text-lg sm:text-2xl font-bold flex items-center">
+                <Zap className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
                 Réservation Express
               </DialogTitle>
-              <p className="text-emerald-100 text-xs sm:text-sm mt-1 truncate">{validEquipment.title}</p>
+              <p className="text-emerald-100 text-sm sm:text-base mt-1 truncate">
+                {validEquipment.title}
+              </p>
               
               {/* Indicateur de progression */}
-              <div className="mt-3 sm:mt-6">
+              <div className="mt-4 sm:mt-6">
                 <div className="flex items-center justify-between">
                   {[1, 2, 3, 4].map((step) => (
                     <div key={step} className="flex items-center">
                       <div className={cn(
-                        "w-6 h-6 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all",
+                        "w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all",
                         currentStep >= step 
                           ? "bg-white text-emerald-600" 
                           : "bg-emerald-500/30 text-white"
@@ -587,18 +589,18 @@ function ReservationModal({
                       </div>
                       {step < 4 && (
                         <div className={cn(
-                          "h-1 w-8 sm:w-16 mx-1 transition-all",
+                          "h-1 w-6 sm:w-16 mx-1 transition-all",
                           currentStep > step ? "bg-white" : "bg-emerald-500/30"
                         )} />
                       )}
                     </div>
                   ))}
                 </div>
-                <div className="flex justify-between mt-2 text-xs sm:text-sm">
+                <div className="flex justify-between mt-2 text-xs">
                   <span className="text-white/90">Dates</span>
                   <span className="text-white/90">Contact</span>
                   <span className="text-white/90">Identité</span>
-                  <span className="text-white/90">Confirmer</span>
+                  <span className="text-white/90">OK</span>
                 </div>
               </div>
             </div>
@@ -697,14 +699,16 @@ function ReservationModal({
                   </div>
 
                   {/* Récapitulatif des coûts */}
-                  <Card className="mt-6 bg-gradient-to-br from-blue-50 to-emerald-50 border-blue-200">
-                    <CardContent className="p-4">
-                      <div className="flex items-center mb-3">
-                        <Calculator className="h-5 w-5 text-blue-600 mr-2" />
-                        <h4 className="font-semibold text-blue-900">Estimation des coûts</h4>
+                  <Card className="mt-4 sm:mt-6 bg-gradient-to-br from-blue-50 to-emerald-50 border-blue-200">
+                    <CardContent className="p-3 sm:p-4">
+                      <div className="flex items-center mb-2 sm:mb-3">
+                        <Calculator className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mr-2" />
+                        <h4 className="font-semibold text-sm sm:text-base text-blue-900">
+                          Estimation des coûts
+                        </h4>
                       </div>
                       
-                      <div className="space-y-2 text-sm">
+                      <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                         <div className="flex justify-between">
                           <span>Prix journalier</span>
                           <span className="font-medium">{safeToLocaleString(validEquipment.daily_price)} FCFA</span>
@@ -986,7 +990,7 @@ function ReservationModal({
           </div>
 
           {/* Footer avec boutons */}
-          <div className="shrink-0 border-t bg-gray-50 p-4 sm:p-6 flex justify-between gap-3">
+          <div className="shrink-0 border-t bg-gray-50 p-3 sm:p-6 flex justify-between gap-3">
             {currentStep > 1 && (
               <Button
                 onClick={prevStep}
