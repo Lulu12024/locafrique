@@ -146,6 +146,17 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    const selectedCategory = categories.find(cat => cat.id === formData.category);
+
+    if (!selectedCategory) {
+      toast({
+        title: "Erreur",
+        description: "Catégorie invalide",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     // Validation simple
     if (!formData.title || !formData.description || !formData.category || !formData.daily_price) {
       toast({
@@ -184,7 +195,7 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
         description: formData.description.trim(),
         daily_price: Number(formData.daily_price),
         deposit_amount: formData.deposit_amount ? Number(formData.deposit_amount) : 0,
-        category: formData.category,
+        category: selectedCategory.name,
         location: formData.location.trim(),
         city: formData.city,
         country: formData.country,

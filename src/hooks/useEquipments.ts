@@ -56,9 +56,15 @@ export function useEquipments() {
       errors.push("Le montant de la caution ne peut pas être négatif");
     }
 
+    // if (!data.category) {
+    //   errors.push("La catégorie est obligatoire");
+    // } else if (!validateCategory(data.category)) {
+    //   errors.push("La catégorie sélectionnée n'est pas valide");
+    // }
+    
     if (!data.category) {
       errors.push("La catégorie est obligatoire");
-    } else if (!validateCategory(data.category)) {
+    } else if (typeof data.category !== 'string' || data.category.length === 0) {
       errors.push("La catégorie sélectionnée n'est pas valide");
     }
 
