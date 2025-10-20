@@ -121,7 +121,7 @@ serve(async (req) => {
     await client.close();
 
     return new Response(
-      JSON.stringify({ success: true }), x
+      JSON.stringify({ success: true }), 
       { headers: { ...corsHeaders, "Content-Type": "application/json" }}
     );
 
