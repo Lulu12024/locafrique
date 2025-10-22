@@ -1,12 +1,17 @@
+// src/pages/MyEquipments.tsx - VERSION FINALE AVEC BOUTON MODIFIER
+
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Package, ArrowLeft, Loader2, MoreVertical } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Package, ArrowLeft, Loader2, Edit } from "lucide-react";
 import AddEquipmentModal from "@/components/AddEquipmentModal";
 import { useEquipments } from "@/hooks/useEquipments";
 import { EquipmentData } from "@/types/supabase";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/components/ui/use-toast";
 
 const MyEquipments: React.FC = () => {
   const navigate = useNavigate();
@@ -15,14 +20,37 @@ const MyEquipments: React.FC = () => {
   const [equipments, setEquipments] = useState<EquipmentData[]>([]);
   const { fetchUserEquipments, isLoading } = useEquipments();
 
-  // Charger les équipements de l'utilisateur
+  // ✅ Charger les équipements avec images
   useEffect(() => {
     const loadEquipments = async () => {
       try {
+        console.log('📦 Chargement des équipements...');
         const userEquipments = await fetchUserEquipments();
-        setEquipments(userEquipments);
+        
+        // ✅ Charger les images pour chaque équipement
+        if (userEquipments && userEquipments.length > 0) {
+          const equipmentsWithImages = await Promise.all(
+            userEquipments.map(async (equipment) => {
+              const { data: images } = await supabase
+                .from('equipment_images')
+                .select('*')
+                .eq('equipment_id', equipment.id)
+                .order('is_primary', { ascending: false });
+              
+              return {
+                ...equipment,
+                images: images || []
+              };
+            })
+          );
+          
+          console.log('✅ Équipements avec images:', equipmentsWithImages);
+          setEquipments(equipmentsWithImages);
+        } else {
+          setEquipments([]);
+        }
       } catch (error) {
-        console.error("Erreur lors du chargement des équipements:", error);
+        console.error("❌ Erreur lors du chargement des équipements:", error);
       }
     };
 
@@ -33,10 +61,22 @@ const MyEquipments: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = async () => {
     setIsModalOpen(false);
     // Recharger les équipements après ajout
-    fetchUserEquipments().then(setEquipments);
+    const userEquipments = await fetchUserEquipments();
+    if (userEquipments) {
+      const equipmentsWithImages = await Promise.all(
+        userEquipments.map(async (equipment) => {
+          const { data: images } = await supabase
+            .from('equipment_images')
+            .select('*')
+            .eq('equipment_id', equipment.id);
+          return { ...equipment, images: images || [] };
+        })
+      );
+      setEquipments(equipmentsWithImages);
+    }
   };
 
   const handleEquipmentClick = (equipmentId: string) => {
@@ -121,6 +161,7 @@ const MyEquipments: React.FC = () => {
                     equipment={equipment}
                     isMobile={isMobile}
                     onClick={() => handleEquipmentClick(equipment.id)}
+                    onEdit={() => navigate(`/edit-equipment/${equipment.id}`)}
                   />
                 ))}
               </div>
@@ -166,40 +207,88 @@ const MyEquipments: React.FC = () => {
       <AddEquipmentModal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        onSuccess={handleCloseModal}
       />
     </div>
   );
 };
 
-// Composant Card d'équipement responsive
+// ✅ Composant Card d'équipement avec bouton Modifier
 interface EquipmentCardProps {
   equipment: EquipmentData;
   isMobile: boolean;
   onClick: () => void;
+  onEdit: () => void;
 }
 
-const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment, isMobile, onClick }) => {
+const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment, isMobile, onClick, onEdit }) => {
+  // ✅ Gestion des images
+  const images = Array.isArray(equipment.images) ? equipment.images : [];
+  const primaryImage = images.find(img => img.is_primary) || images[0];
+
+  // ✅ Badge de statut
+  const getStatusBadge = () => {
+    if (equipment.moderation_status === 'pending') {
+      return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs">⏳ En attente</Badge>;
+    }
+    if (equipment.moderation_status === 'rejected') {
+      return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">❌ Rejeté</Badge>;
+    }
+    if (equipment.moderation_status === 'approved') {
+      if (equipment.status === 'disponible') {
+        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">✅ Disponible</Badge>;
+      }
+      if (equipment.status === 'loue') {
+        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">📦 Loué</Badge>;
+      }
+    }
+    return <Badge variant="outline" className="text-xs">En attente</Badge>;
+  };
+
   return (
     <Card 
       className={`
-        cursor-pointer hover:shadow-md transition-shadow
+        hover:shadow-md transition-shadow
         ${isMobile ? 'border-gray-200' : ''}
       `}
-      onClick={onClick}
     >
       <CardContent className={`${isMobile ? 'p-4' : 'p-6'}`}>
-        {/* Image placeholder */}
-        <div className={`
-          bg-gray-200 rounded-lg mb-3 flex items-center justify-center
-          ${isMobile ? 'h-32' : 'h-40'}
-        `}>
-          <Package className="h-8 w-8 text-gray-400" />
+        {/* Image réelle ou placeholder */}
+        <div 
+          className={`
+            rounded-lg mb-3 overflow-hidden relative cursor-pointer
+            ${isMobile ? 'h-32' : 'h-40'}
+          `}
+          onClick={onClick}
+        >
+          {primaryImage ? (
+            <img
+              src={primaryImage.image_url}
+              alt={equipment.title}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+              <Package className="h-8 w-8 text-gray-400" />
+            </div>
+          )}
+          
+          {/* Badge sur l'image */}
+          <div className="absolute top-2 right-2">
+            {getStatusBadge()}
+          </div>
         </div>
         
+        {/* Message de rejet */}
+        {equipment.moderation_status === 'rejected' && equipment.rejection_reason && (
+          <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-xs font-medium text-red-800">Raison du rejet:</p>
+            <p className="text-xs text-red-700 mt-1 line-clamp-2">{equipment.rejection_reason}</p>
+          </div>
+        )}
+        
         {/* Contenu */}
-        <div className="space-y-2">
-          <h3 className={`font-semibold line-clamp-2 ${isMobile ? 'text-sm' : 'text-base'}`}>
+        <div className="space-y-2" onClick={onClick}>
+          <h3 className={`font-semibold line-clamp-2 cursor-pointer ${isMobile ? 'text-sm' : 'text-base'}`}>
             {equipment.title}
           </h3>
           
@@ -209,43 +298,30 @@ const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment, isMobile, onCl
           
           <div className="flex items-center justify-between">
             <span className={`font-bold text-green-600 ${isMobile ? 'text-sm' : 'text-base'}`}>
-              {equipment.daily_price.toLocaleString()} FCFA/jour
+              {equipment.daily_price?.toLocaleString()} FCFA/jour
             </span>
-            
-            {isMobile && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Menu d'actions
-                }}
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            )}
           </div>
           
-          {/* Badge d'état */}
-          <div className="flex justify-between items-center">
-            <span className={`
-              px-2 py-1 rounded-full text-xs font-medium
-              ${equipment.status === 'disponible' 
-                ? 'bg-green-100 text-green-800' 
-                : 'bg-gray-100 text-gray-800'
-              }
-            `}>
-              {equipment.status === 'disponible' ? 'Disponible' : 'Non disponible'}
+          {equipment.condition && (
+            <span className="text-xs text-gray-500">
+              État: {equipment.condition}
             </span>
-            
-            {equipment.condition && (
-              <span className={`text-xs text-gray-500 ${isMobile ? '' : 'ml-2'}`}>
-                État: {equipment.condition}
-              </span>
-            )}
-          </div>
+          )}
         </div>
+
+        {/* ✅ Bouton Modifier (toujours visible) */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full mt-3"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
+        >
+          <Edit className="h-4 w-4 mr-2" />
+          Modifier
+        </Button>
       </CardContent>
     </Card>
   );

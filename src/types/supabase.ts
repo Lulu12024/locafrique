@@ -68,6 +68,14 @@ export interface EquipmentData {
   images: EquipmentImageData[] | SelectQueryError<string>;
   owner?: ProfileData;
   booking_count?: number;
+  
+  // ✅ AJOUT : Champs de modération
+  moderation_status?: 'pending' | 'approved' | 'rejected' | null;
+  rejected_at?: string | null;
+  rejection_reason?: string | null;
+  approved_at?: string | null;
+  is_premium?: boolean;
+  published_at?: string | null;
 }
 
 export interface EquipmentImageData {

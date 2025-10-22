@@ -35,6 +35,7 @@ import { OwnerDashboard } from "./pages/OwnerDashboard";
 import ProfileSettingsPage from "./pages/ProfileSettingsPage";
 import NotificationSettingsPage from "./pages/NotificationSettingsPage";
 import SecuritySettingsPage from "./pages/SecuritySettingsPage";
+import EditEquipment from "./pages/EditEquipment";
 
 
 // Composant pour gérer le layout conditionnel
@@ -114,6 +115,7 @@ function App() {
             <Route path="/settings/profile" element={<ProfileSettingsPage />} />
             <Route path="/settings/notifications" element={<NotificationSettingsPage />} />
             <Route path="/settings/security" element={<SecuritySettingsPage />} />
+            <Route path="/edit-equipment/:id" element={<EditEquipment />} />
           </Route>
         </Routes>
       </AppLayout>

@@ -404,8 +404,9 @@ export function useEquipments() {
       }
       
       console.log("✅ Équipements récupérés:", data?.length || 0);
+      console.log("📊 Premier équipement:", data?.[0]); // Debug
       
-      // Construction manuelle des objets EquipmentData
+      // ✅ CORRECTION : Construction manuelle avec TOUS les champs
       const equipments: EquipmentData[] = (data || []).map((item: any) => ({
         id: item.id,
         title: item.title,
@@ -425,7 +426,15 @@ export function useEquipments() {
         brand: item.brand || undefined,
         year: item.year || undefined,
         images: [], // À charger séparément si nécessaire
-        booking_count: 0
+        booking_count: 0,
+        
+        // ✅ AJOUT : Champs de modération manquants
+        moderation_status: item.moderation_status || null,
+        rejected_at: item.rejected_at || null,
+        rejection_reason: item.rejection_reason || null,
+        approved_at: item.approved_at || null,
+        is_premium: item.is_premium || false,
+        published_at: item.published_at || null,
       }));
       
       return equipments;
@@ -440,7 +449,7 @@ export function useEquipments() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, toast]);
 
   // Fonction pour mettre à jour un équipement
   const updateEquipment = useCallback(async (
