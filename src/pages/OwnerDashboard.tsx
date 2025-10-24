@@ -1,4 +1,4 @@
-// src/pages/OwnerDashboard.tsx - VERSION COMPLÈTE AVEC GESTION DES STATUTS
+// src/pages/OwnerDashboard.tsx - VERSION AVEC VALIDATION DE DATE
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/auth';
@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';  // ✅ AJOUT
 import { 
   Bell, 
   Clock, 
@@ -20,7 +21,8 @@ import {
   CheckCircle2,
   Package,
   User,
-  MapPin
+  MapPin,
+  AlertCircle  // ✅ AJOUT
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -34,6 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
+import { startOfDay } from 'date-fns';  // ✅ AJOUT
 
 interface BookingWithDetails {
   id: string;
@@ -195,9 +198,35 @@ export function OwnerDashboard() {
     }
   };
 
+  // ✅ NOUVELLE FONCTION : Vérifier si la date de début est atteinte
+  const canStartRental = (booking: BookingWithDetails): boolean => {
+    const today = startOfDay(new Date());
+    const startDate = startOfDay(new Date(booking.start_date));
+    return today >= startDate;
+  };
+
+  // ✅ NOUVELLE FONCTION : Calculer les jours avant le début
+  const getDaysUntilStart = (booking: BookingWithDetails): number => {
+    const today = startOfDay(new Date());
+    const startDate = startOfDay(new Date(booking.start_date));
+    const diffTime = startDate.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
   // Fonction pour démarrer la location
   const handleStartRental = async () => {
     if (!selectedBooking) return;
+
+    // ✅ AJOUT : Vérifier la date avant de démarrer
+    if (!canStartRental(selectedBooking)) {
+      toast({
+        title: "Trop tôt",
+        description: "La date de début de la location n'est pas encore atteinte.",
+        variant: "destructive"
+      });
+      setActionType(null);
+      return;
+    }
     
     setIsProcessing(true);
     try {
@@ -282,7 +311,7 @@ export function OwnerDashboard() {
           user_id: selectedBooking.renter_id,
           type: 'rental_completed',
           title: 'Location terminée',
-          message: `Votre location est terminée. Merci de laisser une évaluation pour "${selectedBooking.equipment?.title}".`,
+          message: `Merci d'avoir loué "${selectedBooking.equipment?.title}". N'oubliez pas de laisser votre avis !`,
           booking_id: selectedBooking.id,
           read: false
         });
@@ -298,7 +327,7 @@ export function OwnerDashboard() {
 
       toast({
         title: "✅ Location terminée",
-        description: "Le locataire a reçu une notification pour laisser son évaluation.",
+        description: "Le locataire a été notifié et peut laisser un avis.",
         duration: 5000
       });
 
@@ -326,11 +355,15 @@ export function OwnerDashboard() {
     });
   };
 
-  // Composant de carte de réservation avec boutons d'action
+  // ✅ MODIFIÉ : Composant de carte avec validation de date
   const BookingCardWithActions: React.FC<{ booking: BookingWithDetails }> = ({ booking }) => {
     const canStart = booking.status === 'confirmed';
     const canComplete = booking.status === 'ongoing';
     const showActions = canStart || canComplete;
+    
+    // ✅ AJOUT : Vérifier si on peut démarrer (date atteinte)
+    const dateReached = canStartRental(booking);
+    const daysUntilStart = getDaysUntilStart(booking);
 
     return (
       <Card className="mb-4">
@@ -379,6 +412,17 @@ export function OwnerDashboard() {
             </Badge>
           </div>
 
+          {/* ✅ AJOUT : Alerte si la date n'est pas atteinte */}
+          {canStart && !dateReached && (
+            <Alert className="mb-3 border-orange-200 bg-orange-50">
+              <AlertCircle className="h-4 w-4 text-orange-600" />
+              <AlertDescription className="text-sm text-orange-900">
+                <p className="font-medium">📅 La location commence dans {daysUntilStart} jour{daysUntilStart > 1 ? 's' : ''}</p>
+                <p className="text-xs mt-1">Le bouton sera disponible le {formatDate(booking.start_date)}.</p>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {showActions && (
             <div className="flex gap-2 mt-3 pt-3 border-t">
               {canStart && (
@@ -387,12 +431,25 @@ export function OwnerDashboard() {
                     setSelectedBooking(booking);
                     setActionType('start');
                   }}
-                  disabled={isProcessing}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  disabled={isProcessing || !dateReached}  // ✅ MODIFIÉ : Désactiver si date pas atteinte
+                  className={`flex-1 ${
+                    dateReached 
+                      ? 'bg-blue-600 hover:bg-blue-700' 
+                      : 'bg-gray-400 cursor-not-allowed'
+                  }`}
                   size="sm"
                 >
-                  <PlayCircle className="h-4 w-4 mr-2" />
-                  Démarrer la location
+                  {!dateReached ? (
+                    <>
+                      <Clock className="h-4 w-4 mr-2" />
+                      Disponible le {new Date(booking.start_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+                    </>
+                  ) : (
+                    <>
+                      <PlayCircle className="h-4 w-4 mr-2" />
+                      Démarrer la location
+                    </>
+                  )}
                 </Button>
               )}
 
@@ -526,7 +583,7 @@ export function OwnerDashboard() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Onglet En attente - utilise BookingApprovalCard */}
+        {/* Onglet En attente */}
         <TabsContent value="pending" className="space-y-4 mt-4">
           {bookings.pending.length === 0 ? (
             <Card>
@@ -546,7 +603,7 @@ export function OwnerDashboard() {
           )}
         </TabsContent>
 
-        {/* Onglet Confirmées - utilise BookingCardWithActions */}
+        {/* Onglet Confirmées */}
         <TabsContent value="confirmed" className="space-y-4 mt-4">
           {bookings.confirmed.length === 0 ? (
             <Card>

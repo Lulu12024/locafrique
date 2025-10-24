@@ -1,5 +1,5 @@
 // src/components/booking/BookingApprovalCard.tsx
-// VERSION CORRIGÉE avec rechargement du statut
+// VERSION AMÉLIORÉE : Modal existant + Validation anti-conflit
 
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +22,8 @@ import {
   DollarSign,
   Mail,
   Loader2,
-  CalendarRange
+  CalendarRange,
+  AlertCircle  // ✅ AJOUT
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -36,15 +37,88 @@ interface BookingApprovalCardProps {
 
 export function BookingApprovalCard({ booking, onStatusChange }: BookingApprovalCardProps) {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);  // ✅ AJOUT
   const [actionType, setActionType] = useState<'approve' | 'reject' | 'propose' | null>(null);
   const [showProposeModal, setShowProposeModal] = useState(false);
-  const [showConfirmApprovalModal, setShowConfirmApprovalModal] = useState(false); // ✅ NOUVEAU
+  const [showConfirmApprovalModal, setShowConfirmApprovalModal] = useState(false);
   const [proposedStartDate, setProposedStartDate] = useState<Date | undefined>();
   const [proposedEndDate, setProposedEndDate] = useState<Date | undefined>();
+  
+  // ✅ AJOUT : État pour les conflits
+  const [conflictError, setConflictError] = useState<{
+    message: string;
+    conflicts: any[];
+  } | null>(null);
 
-  // ✅ ACCEPTER LA RÉSERVATION - Afficher d'abord le modal de confirmation
-  const handleApproveClick = () => {
-    setShowConfirmApprovalModal(true);
+  // ✅ NOUVELLE FONCTION : Valider avant d'ouvrir le modal
+  const validateBeforeApproval = async () => {
+    setIsValidating(true);
+    setConflictError(null);
+
+    try {
+      console.log('🔍 Validation de la réservation:', booking.id);
+
+      // Appeler la fonction Edge de validation
+      const { data, error } = await supabase.functions.invoke(
+        'validate-booking-approval',
+        {
+          body: { booking_id: booking.id }
+        }
+      );
+
+      if (error) {
+        console.error('❌ Erreur validation:', error);
+        toast({
+          title: "Erreur de validation",
+          description: "Impossible de valider cette réservation. Veuillez réessayer.",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      // Si pas valide, afficher l'erreur
+      if (!data.valid) {
+        console.log('❌ Validation échouée:', data);
+        
+        if (data.conflicting_bookings && data.conflicting_bookings.length > 0) {
+          setConflictError({
+            message: data.message || data.error,
+            conflicts: data.conflicting_bookings
+          });
+        } else {
+          toast({
+            title: "Impossible d'accepter",
+            description: data.error || "Cette réservation ne peut pas être acceptée.",
+            variant: "destructive"
+          });
+        }
+        
+        return false;
+      }
+
+      // Validation OK
+      console.log('✅ Validation réussie');
+      return true;
+
+    } catch (error: any) {
+      console.error('❌ Erreur lors de la validation:', error);
+      toast({
+        title: "Erreur",
+        description: error.message || "Une erreur est survenue.",
+        variant: "destructive"
+      });
+      return false;
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  // ✅ MODIFIÉ : Valider AVANT d'ouvrir le modal
+  const handleApproveClick = async () => {
+    const isValid = await validateBeforeApproval();
+    if (isValid) {
+      setShowConfirmApprovalModal(true);
+    }
   };
 
   const handleApproveConfirmed = async () => {
@@ -59,7 +133,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
-          status: 'confirmed',  // ✅ CORRECTION: 'confirmed' au lieu de 'approved'
+          status: 'confirmed',
           approved_at: new Date().toISOString(),
           owner_approval: true
         })
@@ -105,7 +179,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
       });
 
       console.log('✅ Appel de onStatusChange()');
-      // ✅ Recharger les données
       await onStatusChange();
 
     } catch (error: any) {
@@ -129,7 +202,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     try {
       console.log('❌ Démarrage refus de la réservation:', booking.id);
 
-      // 1. Mettre à jour le statut (sans .select() pour éviter erreur RLS)
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
@@ -146,7 +218,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
 
       console.log('✅ Statut mis à jour avec succès');
 
-      // 2. Créer notification
       const { error: notifError } = await supabase
         .from('notifications')
         .insert({
@@ -162,7 +233,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
         console.error('⚠️ Erreur notification:', notifError);
       }
 
-      // 3. Envoyer email
       try {
         await supabase.functions.invoke('send-booking-rejected-email', {
           body: { booking_id: booking.id }
@@ -179,7 +249,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
       });
 
       console.log('✅ Appel de onStatusChange()');
-      // ✅ Recharger les données
       await onStatusChange();
 
     } catch (error: any) {
@@ -214,7 +283,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     setActionType('propose');
 
     try {
-      // Créer notification
       await supabase
         .from('notifications')
         .insert({
@@ -226,23 +294,9 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
           read: false
         });
 
-      // Envoyer email
-      try {
-        await supabase.functions.invoke('send-date-proposal-email', {
-          body: {
-            booking_id: booking.id,
-            proposed_start_date: proposedStartDate.toISOString(),
-            proposed_end_date: proposedEndDate.toISOString()
-          }
-        });
-      } catch (emailError) {
-        console.error('⚠️ Erreur email:', emailError);
-      }
-
       toast({
         title: "Proposition envoyée",
-        description: "Le locataire a reçu votre proposition.",
-        duration: 5000
+        description: "Le locataire a été notifié de votre proposition.",
       });
 
       setShowProposeModal(false);
@@ -250,10 +304,9 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
       setProposedEndDate(undefined);
 
     } catch (error: any) {
-      console.error('❌ Erreur:', error);
       toast({
         title: "Erreur",
-        description: "Impossible d'envoyer la proposition",
+        description: error.message || "Impossible d'envoyer la proposition",
         variant: "destructive"
       });
     } finally {
@@ -262,57 +315,74 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     }
   };
 
-  // ✅ VÉRIFIER LE STATUT ACTUEL
+  // Formater les dates
+  const formatDateDisplay = (dateStr: string) => {
+    try {
+      return format(new Date(dateStr), 'dd MMMM yyyy', { locale: fr });
+    } catch {
+      return dateStr;
+    }
+  };
+
   const isPending = booking.status === 'pending';
-  const isConfirmed = booking.status === 'confirmed';  // ✅ 'confirmed' au lieu de 'approved'
+  const isConfirmed = booking.status === 'confirmed';
   const isRejected = booking.status === 'rejected';
 
   return (
     <>
-      <Card className="w-full">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">
-              {booking.equipment?.title || 'Équipement'}
-            </CardTitle>
-            <Badge variant={
-              booking.status === 'pending' ? 'secondary' : 
-              booking.status === 'confirmed' ? 'default' :   // ✅ Vérifier le statut réel
-              booking.status === 'rejected' ? 'destructive' : 
-              'secondary'
-            }>
-              {booking.status === 'pending' ? '⏳ En attente' : 
-               booking.status === 'confirmed' ? '✅ Confirmée' :   // ✅ Vérifier le statut réel
-               booking.status === 'rejected' ? '❌ Refusée' : 
-               booking.status}
+      <Card className={`border-l-4 ${
+        isPending ? 'border-l-orange-500' : 
+        isConfirmed ? 'border-l-green-500' : 
+        'border-l-red-500'
+      }`}>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center space-x-3">
+              <Avatar className="h-12 w-12">
+                <AvatarImage src={booking.renter?.avatar_url} />
+                <AvatarFallback className="bg-blue-100 text-blue-700">
+                  {booking.renter?.first_name?.[0]}{booking.renter?.last_name?.[0]}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <CardTitle className="text-lg">
+                  {booking.renter?.first_name} {booking.renter?.last_name}
+                </CardTitle>
+                <div className="flex items-center text-sm text-gray-500 mt-1">
+                  <CalendarIcon className="h-3 w-3 mr-1" />
+                  {formatDateDisplay(booking.start_date)} → {formatDateDisplay(booking.end_date)}
+                </div>
+              </div>
+            </div>
+            <Badge 
+              variant={isPending ? "default" : isConfirmed ? "secondary" : "destructive"}
+              className={isPending ? "bg-orange-100 text-orange-800" : ""}
+            >
+              {isPending && <Clock className="h-3 w-3 mr-1" />}
+              {isConfirmed && <CheckCircle className="h-3 w-3 mr-1" />}
+              {isRejected && <XCircle className="h-3 w-3 mr-1" />}
+              {isPending ? 'En attente' : isConfirmed ? 'Confirmée' : 'Refusée'}
             </Badge>
           </div>
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {/* Informations du locataire */}
-          <div className="flex items-start space-x-3">
-            <Avatar className="h-12 w-12">
-              <AvatarImage src={booking.renter?.avatar_url} />
-              <AvatarFallback>
-                {booking.renter?.first_name?.[0]}{booking.renter?.last_name?.[0]}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <h4 className="font-semibold">
-                {booking.renter?.first_name} {booking.renter?.last_name}
-              </h4>
-              <div className="flex items-center text-sm text-gray-600 mt-1">
-                <Mail className="h-3 w-3 mr-1" />
-                {booking.renter?.email || 'Email non disponible'}
+          <Separator />
+          
+          {/* Informations de contact */}
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            {booking.renter?.phone_number && (
+              <div className="flex items-center space-x-2">
+                <Phone className="h-4 w-4 text-gray-500" />
+                <span>{booking.renter.phone_number}</span>
               </div>
-              {booking.contact_phone && (
-                <div className="flex items-center text-sm text-gray-600 mt-1">
-                  <Phone className="h-3 w-3 mr-1" />
-                  {booking.contact_phone}
-                </div>
-              )}
-            </div>
+            )}
+            {booking.renter?.email && (
+              <div className="flex items-center space-x-2">
+                <Mail className="h-4 w-4 text-gray-500" />
+                <span className="truncate">{booking.renter.email}</span>
+              </div>
+            )}
           </div>
 
           <Separator />
@@ -320,16 +390,9 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
           {/* Détails de la réservation */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <h5 className="font-medium text-sm text-gray-700 mb-1">Dates</h5>
-              <div className="flex items-center text-sm">
-                <CalendarIcon className="h-3 w-3 mr-1" />
-                <span>
-                  {format(new Date(booking.start_date), 'dd MMM', { locale: fr })} - 
-                  {format(new Date(booking.end_date), 'dd MMM yyyy', { locale: fr })}
-                </span>
-              </div>
+              <h5 className="font-medium text-sm text-gray-700 mb-1">Équipement</h5>
+              <p className="text-sm font-semibold">{booking.equipment?.title}</p>
             </div>
-
             <div>
               <h5 className="font-medium text-sm text-gray-700 mb-1">Prix total</h5>
               <p className="text-sm font-semibold text-green-600">
@@ -360,15 +423,46 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
             </div>
           )}
 
-          {/* ✅ ACTIONS : Affichage conditionnel selon le statut */}
+          {/* ✅ NOUVELLE ALERTE DE CONFLIT */}
+          {conflictError && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <p className="font-semibold mb-2">{conflictError.message}</p>
+                <div className="space-y-2 text-xs mt-3">
+                  {conflictError.conflicts.map((conflict: any) => (
+                    <div key={conflict.id} className="bg-red-50 p-3 rounded border border-red-200">
+                      <p className="font-medium">📅 {conflict.renter_name}</p>
+                      <p className="text-red-800">
+                        Du {formatDateDisplay(conflict.start_date)} au {formatDateDisplay(conflict.end_date)}
+                      </p>
+                      <Badge variant="outline" className="mt-1 text-xs">
+                        {conflict.status === 'confirmed' ? '✅ Confirmée' : '🔄 En cours'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs italic">
+                  💡 Cette réservation ne peut pas être acceptée car les dates chevauchent une location déjà confirmée ou en cours.
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* ACTIONS */}
           {isPending && (
             <div className="space-y-2">
               <Button
-                onClick={handleApproveClick}  // ✅ Ouvre le modal de confirmation
-                disabled={isProcessing}
+                onClick={handleApproveClick}
+                disabled={isProcessing || isValidating}
                 className="w-full bg-green-600 hover:bg-green-700"
               >
-                {isProcessing && actionType === 'approve' ? (
+                {isValidating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Vérification des disponibilités...
+                  </>
+                ) : isProcessing && actionType === 'approve' ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Acceptation en cours...
@@ -383,7 +477,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
 
               <Button
                 onClick={handleProposeDate}
-                disabled={isProcessing}
+                disabled={isProcessing || isValidating}
                 variant="outline"
                 className="w-full border-blue-300 text-blue-700 hover:bg-blue-50"
               >
@@ -393,7 +487,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
 
               <Button
                 onClick={handleReject}
-                disabled={isProcessing}
+                disabled={isProcessing || isValidating}
                 variant="outline"
                 className="w-full border-red-300 text-red-700 hover:bg-red-50"
               >
@@ -438,7 +532,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
         </CardContent>
       </Card>
 
-      {/* ✅ MODAL DE CONFIRMATION AVANT APPROBATION */}
+      {/* MODAL DE CONFIRMATION AVANT APPROBATION (votre modal existant) */}
       <Dialog open={showConfirmApprovalModal} onOpenChange={setShowConfirmApprovalModal}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>

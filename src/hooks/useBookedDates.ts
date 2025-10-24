@@ -1,5 +1,5 @@
 // src/hooks/useBookedDates.ts
-// VERSION CORRIGÉE - Sans erreur de subscription multiple
+// VERSION CORRIGÉE - Sans les réservations "pending"
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { startOfDay, endOfDay, eachDayOfInterval, parseISO } from 'date-fns';
@@ -36,12 +36,13 @@ export const useBookedDates = (equipmentId: string | undefined) => {
         setIsLoading(true);
         console.log('🔍 Chargement des dates réservées pour l\'équipement:', equipmentId);
 
-        // Récupérer toutes les réservations actives (confirmées, en attente, en cours)
+        // ✅ MODIFIÉ : Récupérer uniquement les réservations confirmées et en cours
+        // Les réservations "pending" ne bloquent pas les dates
         const { data: bookings, error } = await supabase
           .from('bookings')
           .select('start_date, end_date, status')
           .eq('equipment_id', equipmentId)
-          .in('status', ['confirmed', 'pending', 'in_progress']);
+          .in('status', ['confirmed', 'in_progress']); // ✅ SANS 'pending'
 
         if (error) {
           console.error('❌ Erreur lors de la récupération des réservations:', error);
@@ -52,7 +53,7 @@ export const useBookedDates = (equipmentId: string | undefined) => {
         }
 
         if (!bookings || bookings.length === 0) {
-          console.log('✅ Aucune réservation trouvée pour cet équipement');
+          console.log('✅ Aucune réservation confirmée pour cet équipement');
           if (isMounted) {
             setBookedDates([]);
             setBookedRanges([]);
@@ -61,7 +62,7 @@ export const useBookedDates = (equipmentId: string | undefined) => {
           return;
         }
 
-        console.log(`✅ ${bookings.length} réservation(s) trouvée(s)`);
+        console.log(`✅ ${bookings.length} réservation(s) confirmée(s) trouvée(s)`);
 
         // Stocker les plages de dates
         if (isMounted) {
@@ -93,7 +94,7 @@ export const useBookedDates = (equipmentId: string | undefined) => {
         if (isMounted) {
           setBookedDates(allBookedDates);
           setIsLoading(false);
-          console.log(`✅ Total de ${allBookedDates.length} jours réservés`);
+          console.log(`✅ Total de ${allBookedDates.length} jours bloqués (confirmés uniquement)`);
         }
 
       } catch (error) {
