@@ -1,4 +1,6 @@
 // src/components/booking/DateRangePickerWithBlockedDates.tsx
+// VERSION CORRIGÉE POUR PRODUCTION - Empêche la fermeture automatique
+
 import React, { useState } from 'react';
 import { DateRange } from 'react-day-picker';
 import { Calendar } from '@/components/ui/calendar';
@@ -85,6 +87,11 @@ export const DateRangePickerWithBlockedDates: React.FC<DateRangePickerWithBlocke
 
       setDate(selectedRange);
       setError(null);
+      
+      // ✅ IMPORTANT : Fermer avec un délai pour éviter les conflits
+      setTimeout(() => {
+        setIsOpen(false);
+      }, 100);
     }
   };
 
@@ -123,9 +130,15 @@ export const DateRangePickerWithBlockedDates: React.FC<DateRangePickerWithBlocke
     selected: 'bg-primary text-primary-foreground',
   };
 
+  // ✅ CORRECTION CRITIQUE : Empêcher la propagation des clics
+  const handlePopoverContentClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
   return (
     <div className={className}>
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <Popover open={isOpen} onOpenChange={setIsOpen} modal={false}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -134,14 +147,33 @@ export const DateRangePickerWithBlockedDates: React.FC<DateRangePickerWithBlocke
               !date?.from && 'text-muted-foreground',
               buttonClassName
             )}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(!isOpen);
+            }}
           >
             <CalendarIcon className="mr-3 h-5 w-5 flex-shrink-0" />
             <span className="truncate">{formatDateDisplay()}</span>
           </Button>
         </PopoverTrigger>
         
-        <PopoverContent className="w-auto p-0 z-[10000]" align="start">
-          <div className="p-4 space-y-3">
+        <PopoverContent 
+          className="w-auto p-0 z-[10000]" 
+          align="start"
+          onClick={handlePopoverContentClick}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onInteractOutside={(e) => {
+            // ✅ Empêcher la fermeture si on clique à l'intérieur du calendrier
+            const target = e.target as HTMLElement;
+            if (target.closest('[role="dialog"]') || target.closest('.rdp')) {
+              e.preventDefault();
+            }
+          }}
+        >
+          <div 
+            className="p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
             {bookedDates.length > 0 && (
               <Alert>
                 <AlertCircle className="h-4 w-4" />
@@ -158,19 +190,21 @@ export const DateRangePickerWithBlockedDates: React.FC<DateRangePickerWithBlocke
               </Alert>
             )}
 
-            <Calendar
-              initialFocus
-              mode="range"
-              defaultMonth={date?.from || new Date()}
-              selected={date}
-              onSelect={handleDateSelect}
-              numberOfMonths={2}
-              locale={fr}
-              disabled={isDateDisabled}
-              modifiers={modifiers}
-              modifiersClassNames={modifiersClassNames}
-              className="rounded-md border"
-            />
+            <div onClick={(e) => e.stopPropagation()}>
+              <Calendar
+                initialFocus
+                mode="range"
+                defaultMonth={date?.from || new Date()}
+                selected={date}
+                onSelect={handleDateSelect}
+                numberOfMonths={2}
+                locale={fr}
+                disabled={isDateDisabled}
+                modifiers={modifiers}
+                modifiersClassNames={modifiersClassNames}
+                className="rounded-md border"
+              />
+            </div>
 
             <div className="flex gap-2 text-xs">
               <div className="flex items-center gap-1">

@@ -1,5 +1,6 @@
 // src/components/booking/SingleDatePickerWithBlockedDates.tsx
-// VERSION ULTRA-ROBUSTE - Affichage garanti
+// VERSION CORRIGÉE POUR PRODUCTION - Empêche la fermeture automatique
+
 import React, { useState, useEffect } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -108,7 +109,11 @@ export const SingleDatePickerWithBlockedDates: React.FC<SingleDatePickerWithBloc
     // Mettre à jour l'état local ET l'état parent
     setSelectedDate(newDate);
     setDate(newDate);
-    setIsOpen(false);
+    
+    // ✅ IMPORTANT : Fermer avec un délai pour éviter les conflits d'événements
+    setTimeout(() => {
+      setIsOpen(false);
+    }, 100);
     
     console.log('✅ Date mise à jour:', newDate);
   };
@@ -136,6 +141,12 @@ export const SingleDatePickerWithBlockedDates: React.FC<SingleDatePickerWithBloc
     }
   };
 
+  // ✅ CORRECTION CRITIQUE : Empêcher la propagation des clics
+  const handlePopoverContentClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
   // Afficher un loader pendant le chargement
   if (isLoading) {
     return (
@@ -155,7 +166,7 @@ export const SingleDatePickerWithBlockedDates: React.FC<SingleDatePickerWithBloc
 
   return (
     <div className={className}>
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <Popover open={isOpen} onOpenChange={setIsOpen} modal={false}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -163,14 +174,33 @@ export const SingleDatePickerWithBlockedDates: React.FC<SingleDatePickerWithBloc
               'w-full justify-start text-left font-normal h-12 px-4',
               !selectedDate && !date && 'text-muted-foreground'
             )}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(!isOpen);
+            }}
           >
             <CalendarIcon className="mr-3 h-5 w-5" />
             <span className="truncate">{formatDateDisplay()}</span>
           </Button>
         </PopoverTrigger>
         
-        <PopoverContent className="w-auto p-0 z-[10000]" align="start">
-          <div className="p-4 space-y-3">
+        <PopoverContent 
+          className="w-auto p-0 z-[10000]" 
+          align="start"
+          onClick={handlePopoverContentClick}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onInteractOutside={(e) => {
+            // ✅ Empêcher la fermeture si on clique à l'intérieur du calendrier
+            const target = e.target as HTMLElement;
+            if (target.closest('[role="dialog"]') || target.closest('.rdp')) {
+              e.preventDefault();
+            }
+          }}
+        >
+          <div 
+            className="p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
             {bookedDates.length > 0 && (
               <Alert>
                 <AlertCircle className="h-4 w-4" />
@@ -180,14 +210,16 @@ export const SingleDatePickerWithBlockedDates: React.FC<SingleDatePickerWithBloc
               </Alert>
             )}
 
-            <Calendar
-              mode="single"
-              selected={selectedDate || date}
-              onSelect={handleDateSelect}
-              disabled={isDateDisabled}
-              className="rounded-md border"
-              initialFocus
-            />
+            <div onClick={(e) => e.stopPropagation()}>
+              <Calendar
+                mode="single"
+                selected={selectedDate || date}
+                onSelect={handleDateSelect}
+                disabled={isDateDisabled}
+                className="rounded-md border"
+                initialFocus
+              />
+            </div>
 
             <div className="flex gap-3 text-xs text-muted-foreground border-t pt-2">
               <div className="flex items-center gap-1.5">
