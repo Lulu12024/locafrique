@@ -39,6 +39,8 @@ import { useAuth } from '@/hooks/auth';
 import { useEquipmentReviews } from '@/hooks/useEquipmentReviews';
 import type { EquipmentReview } from '@/hooks/useEquipmentReviews';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { AvailabilityCalendar } from '@/components/booking/AvailabilityCalendar';
+import { useBookedDates } from '@/hooks/useBookedDates';
 
 interface SafeImageProps {
   src?: string;
@@ -180,8 +182,6 @@ const EquipmentDetail = () => {
   const [realOwnerStats, setRealOwnerStats] = useState({ averageRating: 0, totalReviews: 0 });
 
   const [similarEquipments, setSimilarEquipments] = useState<EquipmentData[]>([]);
-  const [bookedDates, setBookedDates] = useState<string[]>([]);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [showStickyNav, setShowStickyNav] = useState(false);
   const [activeSection, setActiveSection] = useState('photos');
   const [showStickyBooking, setShowStickyBooking] = useState(false);
@@ -297,7 +297,6 @@ const EquipmentDetail = () => {
         setEquipment(equipmentData);
         await loadEquipmentStats(id);
         await incrementViewCount(id);
-        await loadBookedDates(id);
         
         // Charger les équipements similaires
         if (equipmentData.category) {
@@ -424,64 +423,9 @@ const EquipmentDetail = () => {
     }
   };
 
-  // Charger les dates réservées
-  const loadBookedDates = async (equipmentId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('start_date, end_date')
-        .eq('equipment_id', equipmentId)
-        .in('status', ['confirmed', 'pending', 'in_progress']);
-
-      if (!error && data) {
-        const dates: string[] = [];
-        data.forEach(booking => {
-          const start = new Date(booking.start_date);
-          const end = new Date(booking.end_date);
-          
-          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-            dates.push(d.toISOString().split('T')[0]);
-          }
-        });
-        
-        setBookedDates(dates);
-        console.log("✅ Dates réservées chargées:", dates.length);
-      }
-    } catch (error) {
-      console.error("❌ Erreur chargement dates réservées:", error);
-    }
-  };
 
   // Fonctions calendrier
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
-    
-    return { daysInMonth, startingDayOfWeek, year, month };
-  };
-
-  const isDateBooked = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
-    return bookedDates.includes(dateStr);
-  };
-
-  const isDatePast = (date: Date) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return date < today;
-  };
-
-  const previousMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
-  };
-
-  const nextMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
-  };
+  
 
   const handleReservationSuccess = () => {
     toast({
@@ -1143,14 +1087,13 @@ const EquipmentDetail = () => {
               </Card>
 
               {/* 1. CALENDRIER DE DISPONIBILITÉ */}
-              <Card ref={calendarRef}>
+              {/* <Card ref={calendarRef}>
                 <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
                   <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>
                     Disponibilité
                   </h3>
                   
                   <div className="space-y-4">
-                    {/* Légende */}
                     <div className="flex items-center justify-center gap-6 text-sm pb-4">
                       <div className="flex items-center gap-2">
                         <div className="w-4 h-4 bg-white border-2 border-gray-300 rounded"></div>
@@ -1166,9 +1109,7 @@ const EquipmentDetail = () => {
                       </div>
                     </div>
 
-                    {/* Calendrier */}
                     <div className="bg-white border border-gray-200 rounded-lg p-4">
-                      {/* Header avec navigation */}
                       <div className="flex items-center justify-between mb-4">
                         <button
                           onClick={previousMonth}
@@ -1190,7 +1131,6 @@ const EquipmentDetail = () => {
                         </button>
                       </div>
 
-                      {/* Jours de la semaine */}
                       <div className="grid grid-cols-7 gap-1 mb-2">
                         {['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'].map((day) => (
                           <div key={day} className="text-center text-sm font-medium text-gray-600 py-2">
@@ -1199,7 +1139,6 @@ const EquipmentDetail = () => {
                         ))}
                       </div>
 
-                      {/* Jours du mois */}
                       <div className="grid grid-cols-7 gap-1">
                         {(() => {
                           const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentMonth);
@@ -1246,7 +1185,14 @@ const EquipmentDetail = () => {
                     </p>
                   </div>
                 </CardContent>
-              </Card>
+              </Card> */}
+              <div ref={calendarRef} id="calendar" className="scroll-mt-20">
+                <AvailabilityCalendar 
+                  equipmentId={equipment.id}
+                  showLegend={true}
+                  compact={isMobile}
+                />
+              </div>
 
               {/* 2. CARTE DE LOCALISATION */}
               <Card>

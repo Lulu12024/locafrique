@@ -29,6 +29,8 @@ import {
 import { useAuth } from '@/hooks/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
+import { DateRangePickerWithBlockedDates } from './DateRangePickerWithBlockedDates';
+import { SingleDatePickerWithBlockedDates } from './SingleDatePickerWithBlockedDates';
 // import { KkiaPayWidget } from '@/components/KkiaPayWidget'; /* PAIEMENT */
 
 /* PAIEMENT - Déclarations TypeScript pour KakiaPay
@@ -65,15 +67,31 @@ function ReservationModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // États pour les dates
-  const [selectedStartDate, setSelectedStartDate] = useState<Date>(
-    startDate ? new Date(startDate) : new Date()
-  );
-  const [selectedEndDate, setSelectedEndDate] = useState<Date>(
-    endDate ? new Date(endDate) : new Date()
-  );
-  const [isStartDateOpen, setIsStartDateOpen] = useState(false);
-  const [isEndDateOpen, setIsEndDateOpen] = useState(false);
+  // const [selectedStartDate, setSelectedStartDate] = useState<Date>(
+  //   startDate ? new Date(startDate) : new Date()
+  // );
+  // const [selectedEndDate, setSelectedEndDate] = useState<Date>(
+  //   endDate ? new Date(endDate) : new Date()
+  // );
+  // const [isStartDateOpen, setIsStartDateOpen] = useState(false);
+  // const [isEndDateOpen, setIsEndDateOpen] = useState(false);
 
+  // const [selectedDateRange, setSelectedDateRange] = useState<{from: Date | undefined, to: Date | undefined}>(() => {
+  //   const today = new Date();
+  //   const tomorrow = new Date(today);
+  //   tomorrow.setDate(tomorrow.getDate() + 1);
+    
+  //   return {
+  //     from: startDate ? new Date(startDate) : undefined,
+  //     to: endDate ? new Date(endDate) : undefined
+  //   };
+  // });
+  const [selectedStartDate, setSelectedStartDate] = useState<Date | undefined>(
+    startDate ? new Date(startDate) : undefined
+  );
+  const [selectedEndDate, setSelectedEndDate] = useState<Date | undefined>(
+    endDate ? new Date(endDate) : undefined
+  );
   /* PAIEMENT - États pour le paiement
   const [paymentCompleted, setPaymentCompleted] = useState(false);
   const [kakiaPayTransactionId, setKakiaPayTransactionId] = useState<string>('');
@@ -103,8 +121,19 @@ function ReservationModal({
       };
     }
 
-    const start = new Date(selectedStartDate);
-    const end = new Date(selectedEndDate);
+    if (!selectedStartDate || !selectedEndDate) {
+    return {
+      baseCost: 0,
+      numberOfDays: 0,
+      commissionAmount: 0,
+      platformFee: 0,
+      totalWithFees: 0
+    };
+  }
+
+    const start = selectedStartDate;
+    const end = selectedEndDate;
+
     const diffTime = Math.abs(end.getTime() - start.getTime());
     const numberOfDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
     
@@ -167,21 +196,77 @@ function ReservationModal({
     }
   };
 
-  const nextStep = () => {
+  const nextStep = async () => {
     // Validations
     if (currentStep === 1) {
-      if (!selectedStartDate || !selectedEndDate) {
+      if (!selectedStartDate) {
         toast({
-          title: "Dates requises",
-          description: "Veuillez sélectionner les dates de début et de fin.",
+          title: "Date de début requise",
+          description: "Veuillez sélectionner une date de début.",
           variant: "destructive"
         });
         return;
       }
+
+      if (!selectedEndDate) {
+        toast({
+          title: "Date de fin requise",
+          description: "Veuillez sélectionner une date de fin.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       if (selectedEndDate <= selectedStartDate) {
         toast({
           title: "Dates invalides",
           description: "La date de fin doit être après la date de début.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // ✅ AJOUTER CETTE VALIDATION BACKEND
+      console.log('🔍 Validation des dates auprès du serveur...');
+      
+      try {
+        const { data: validation, error: validationError } = await supabase.functions.invoke(
+          'validate-booking-dates',
+          {
+            body: {
+              equipment_id: validEquipment.id,
+              start_date: selectedStartDate.toISOString(),
+            end_date: selectedEndDate.toISOString(),
+            }
+          }
+        );
+
+        if (validationError) {
+          console.error('❌ Erreur validation:', validationError);
+          toast({
+            title: "Erreur de validation",
+            description: "Impossible de vérifier la disponibilité. Veuillez réessayer.",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        if (!validation?.valid) {
+          console.log('❌ Dates non valides:', validation);
+          toast({
+            title: "Dates non disponibles",
+            description: validation?.error || "Ces dates chevauchent une réservation existante. Veuillez choisir d'autres dates.",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        console.log('✅ Dates validées avec succès');
+      } catch (error) {
+        console.error('❌ Erreur lors de la validation:', error);
+        toast({
+          title: "Erreur",
+          description: "Une erreur est survenue lors de la validation des dates.",
           variant: "destructive"
         });
         return;
@@ -364,8 +449,10 @@ function ReservationModal({
       const bookingData = {
         equipment_id: validEquipment.id,
         renter_id: user.id,
-        start_date: selectedStartDate.toISOString().split('T')[0],
-        end_date: selectedEndDate.toISOString().split('T')[0],
+        // start_date: selectedStartDate.toISOString().split('T')[0],
+        // end_date: selectedEndDate.toISOString().split('T')[0],
+        start_date: selectedStartDate.toISOString(),
+        end_date: selectedEndDate.toISOString(),
         total_price: feeCalculations.baseCost,
         deposit_amount: validEquipment.deposit_amount,
         status: 'pending', // En attente de validation du propriétaire
@@ -555,10 +642,9 @@ function ReservationModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open && (isStartDateOpen || isEndDateOpen)) {
-        return;
+      if (!open) {
+        onClose();
       }
-      onClose();
     }}>
       <DialogContent 
         className="w-[95vw] max-w-lg sm:max-w-2xl lg:max-w-4xl h-[92vh] p-0 flex flex-col"
@@ -612,13 +698,12 @@ function ReservationModal({
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-6 sm:py-4">
             {/* Étape 1: Sélection des dates */}
-            {currentStep === 1 && (
+            {/* {currentStep === 1 && (
               <div className="space-y-3">
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Sélectionnez vos dates</h3>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Date de début */}
                     <div>
                       <Label className="text-sm font-medium mb-2 block">Date de début</Label>
                       <Popover 
@@ -660,7 +745,6 @@ function ReservationModal({
                     </div>
 
 
-                    {/* Date de fin */}
                     <div>
                       <Label className="text-sm font-medium mb-2 block">Date de fin</Label>
                       <Popover 
@@ -702,7 +786,6 @@ function ReservationModal({
                     </div>
                   </div>
 
-                  {/* Récapitulatif des coûts */}
                   <Card className="mt-4 sm:mt-6 bg-gradient-to-br from-blue-50 to-emerald-50 border-blue-200">
                     <CardContent className="p-3 sm:p-4">
                       <div className="flex items-center mb-2 sm:mb-3">
@@ -742,6 +825,115 @@ function ReservationModal({
                       </div>
                     </CardContent>
                   </Card>
+                </div>
+              </div>
+            )} */}
+            {currentStep === 1 && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Sélectionner les dates</h3>
+                  
+                  {/* Message informatif */}
+                  <Alert className="mb-6">
+                    <Info className="h-4 w-4" />
+                    <AlertDescription className="text-sm">
+                      Les dates déjà réservées sont automatiquement bloquées. 
+                      Vous ne pouvez pas sélectionner des dates qui chevauchent une réservation existante.
+                    </AlertDescription>
+                  </Alert>
+
+                  {/* Champ 1 : Date de début */}
+                  <div className="space-y-2 mb-4">
+                    <Label htmlFor="start-date" className="text-sm font-medium">
+                      Date de début <span className="text-red-500">*</span>
+                    </Label>
+                    <SingleDatePickerWithBlockedDates
+                      equipmentId={validEquipment.id}
+                      date={selectedStartDate}
+                      setDate={(date) => {
+                        console.log('📅 Date de début sélectionnée:', date);
+                        setSelectedStartDate(date);
+                        // Si la date de fin est avant la nouvelle date de début, la réinitialiser
+                        if (date && selectedEndDate && selectedEndDate <= date) {
+                          setSelectedEndDate(undefined);
+                          toast({
+                            title: "Date de fin réinitialisée",
+                            description: "La date de fin doit être après la date de début.",
+                          });
+                        }
+                      }}
+                      label="Date de début"
+                      placeholder="Sélectionner la date de début"
+                    />
+                  </div>
+
+                  {/* Champ 2 : Date de fin */}
+                  <div className="space-y-2 mb-4">
+                    <Label htmlFor="end-date" className="text-sm font-medium">
+                      Date de fin <span className="text-red-500">*</span>
+                    </Label>
+                    <SingleDatePickerWithBlockedDates
+                      equipmentId={validEquipment.id}
+                      date={selectedEndDate}
+                      setDate={(date) => {
+                        console.log('📅 Date de fin sélectionnée:', date);
+                        setSelectedEndDate(date);
+                      }}
+                      label="Date de fin"
+                      placeholder="Sélectionner la date de fin"
+                      minDate={selectedStartDate} // ✅ La date de fin doit être après la date de début
+                    />
+                    {selectedStartDate && !selectedEndDate && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Sélectionnez une date après le {safeFormatDate(selectedStartDate)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Affichage de la période sélectionnée */}
+                  {selectedStartDate && selectedEndDate && (
+                    <Card className="bg-green-50 border-green-200">
+                      <CardContent className="p-4">
+                        <div className="flex items-center mb-3">
+                          <CalendarIcon className="h-5 w-5 text-green-600 mr-2" />
+                          <span className="font-semibold text-green-800">Période sélectionnée</span>
+                        </div>
+                        <div className="space-y-2 text-sm text-green-700">
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Début :</span>
+                            <span className="font-medium">{safeFormatDate(selectedStartDate, 'long')}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Fin :</span>
+                            <span className="font-medium">{safeFormatDate(selectedEndDate, 'long')}</span>
+                          </div>
+                          <Separator className="my-2 bg-green-200" />
+                          <div className="flex justify-between items-center">
+                            <span className="font-semibold">Durée totale :</span>
+                            <span className="font-bold text-base">
+                              {feeCalculations.numberOfDays} jour{feeCalculations.numberOfDays > 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center pt-2 border-t border-green-200">
+                            <span className="font-semibold">Prix estimé :</span>
+                            <span className="font-bold text-lg text-green-700">
+                              {safeToLocaleString(feeCalculations.totalWithFees)} FCFA
+                            </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Message d'aide */}
+                  {!selectedStartDate && (
+                    <Alert variant="default" className="mt-4">
+                      <CalendarIcon className="h-4 w-4" />
+                      <AlertDescription className="text-sm">
+                        Commencez par sélectionner une date de début
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
               </div>
             )}

@@ -106,12 +106,12 @@ const ProfileDropdown: React.FC = () => {
     {
       icon: ClipboardCheck,
       label: "Demandes reçues",
-      onClick: () => handleNavigation('/my-bookings')
+      onClick: () => handleNavigation('/received-bookings')
     },
     {
       icon: ShoppingCart,
       label: "Mes locations",
-      onClick: () => handleNavigation('/my-rentals')
+      onClick: () => handleNavigation('/my-bookings')
     },
     {
       icon: History,
