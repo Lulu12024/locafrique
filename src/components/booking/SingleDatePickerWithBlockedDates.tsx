@@ -1,5 +1,5 @@
 // src/components/booking/SingleDatePickerWithBlockedDates.tsx
-// VERSION CORRIGÉE POUR PRODUCTION - Empêche la fermeture automatique
+// VERSION FINALE - Basée sur la solution qui fonctionne dans ReservationModal
 
 import React, { useState, useEffect } from 'react';
 import { Calendar } from '@/components/ui/calendar';
@@ -106,14 +106,10 @@ export const SingleDatePickerWithBlockedDates: React.FC<SingleDatePickerWithBloc
       return;
     }
 
-    // Mettre à jour l'état local ET l'état parent
+    // ✅ SOLUTION QUI FONCTIONNE : Mettre à jour et fermer manuellement
     setSelectedDate(newDate);
     setDate(newDate);
-    
-    // ✅ IMPORTANT : Fermer avec un délai pour éviter les conflits d'événements
-    setTimeout(() => {
-      setIsOpen(false);
-    }, 100);
+    setIsOpen(false);  // ✅ Fermeture manuelle
     
     console.log('✅ Date mise à jour:', newDate);
   };
@@ -141,12 +137,6 @@ export const SingleDatePickerWithBlockedDates: React.FC<SingleDatePickerWithBloc
     }
   };
 
-  // ✅ CORRECTION CRITIQUE : Empêcher la propagation des clics
-  const handlePopoverContentClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-  };
-
   // Afficher un loader pendant le chargement
   if (isLoading) {
     return (
@@ -166,7 +156,11 @@ export const SingleDatePickerWithBlockedDates: React.FC<SingleDatePickerWithBloc
 
   return (
     <div className={className}>
-      <Popover open={isOpen} onOpenChange={setIsOpen} modal={false}>
+      <Popover 
+        open={isOpen} 
+        onOpenChange={setIsOpen}
+        modal={true}  // ✅ SOLUTION QUI FONCTIONNE
+      >
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -174,10 +168,6 @@ export const SingleDatePickerWithBlockedDates: React.FC<SingleDatePickerWithBloc
               'w-full justify-start text-left font-normal h-12 px-4',
               !selectedDate && !date && 'text-muted-foreground'
             )}
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsOpen(!isOpen);
-            }}
           >
             <CalendarIcon className="mr-3 h-5 w-5" />
             <span className="truncate">{formatDateDisplay()}</span>
@@ -185,22 +175,14 @@ export const SingleDatePickerWithBlockedDates: React.FC<SingleDatePickerWithBloc
         </PopoverTrigger>
         
         <PopoverContent 
-          className="w-auto p-0 z-[10000]" 
+          className="w-auto p-0 z-[9999]"  // ✅ z-index très élevé
           align="start"
-          onClick={handlePopoverContentClick}
-          onOpenAutoFocus={(e) => e.preventDefault()}
           onInteractOutside={(e) => {
-            // ✅ Empêcher la fermeture si on clique à l'intérieur du calendrier
-            const target = e.target as HTMLElement;
-            if (target.closest('[role="dialog"]') || target.closest('.rdp')) {
-              e.preventDefault();
-            }
+            // ✅ SOLUTION QUI FONCTIONNE : Bloquer tous les clics extérieurs
+            e.preventDefault();
           }}
         >
-          <div 
-            className="p-4 space-y-3"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="p-4 space-y-3">
             {bookedDates.length > 0 && (
               <Alert>
                 <AlertCircle className="h-4 w-4" />
@@ -210,16 +192,14 @@ export const SingleDatePickerWithBlockedDates: React.FC<SingleDatePickerWithBloc
               </Alert>
             )}
 
-            <div onClick={(e) => e.stopPropagation()}>
-              <Calendar
-                mode="single"
-                selected={selectedDate || date}
-                onSelect={handleDateSelect}
-                disabled={isDateDisabled}
-                className="rounded-md border"
-                initialFocus
-              />
-            </div>
+            <Calendar
+              mode="single"
+              selected={selectedDate || date}
+              onSelect={handleDateSelect}  // ✅ Fermeture manuelle dans la fonction
+              disabled={isDateDisabled}
+              className="rounded-md border"
+              initialFocus
+            />
 
             <div className="flex gap-3 text-xs text-muted-foreground border-t pt-2">
               <div className="flex items-center gap-1.5">
