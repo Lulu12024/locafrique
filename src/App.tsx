@@ -36,6 +36,7 @@ import ProfileSettingsPage from "./pages/ProfileSettingsPage";
 import NotificationSettingsPage from "./pages/NotificationSettingsPage";
 import SecuritySettingsPage from "./pages/SecuritySettingsPage";
 import EditEquipment from "./pages/EditEquipment";
+import BookingReviewPage from "./pages/BookingReviewPage"; // NOUVELLE IMPORT
 
 
 // Composant pour gérer le layout conditionnel
@@ -46,7 +47,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   const detailPages = [
     '/equipments/details',
     '/owner/profile' , // AJOUT DE LA PAGE OWNER PROFILE
-    '/settings'
+    '/settings',
+    '/bookings'
   ];
   
   // Vérifier si on est sur une page de détails
@@ -116,6 +118,9 @@ function App() {
             <Route path="/settings/notifications" element={<NotificationSettingsPage />} />
             <Route path="/settings/security" element={<SecuritySettingsPage />} />
             <Route path="/edit-equipment/:id" element={<EditEquipment />} />
+
+            <Route path="/bookings/:booking_id/review" element={<BookingReviewPage />} />
+            
           </Route>
         </Routes>
       </AppLayout>
