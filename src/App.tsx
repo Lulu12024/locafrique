@@ -37,7 +37,7 @@ import NotificationSettingsPage from "./pages/NotificationSettingsPage";
 import SecuritySettingsPage from "./pages/SecuritySettingsPage";
 import EditEquipment from "./pages/EditEquipment";
 import BookingReviewPage from "./pages/BookingReviewPage"; // NOUVELLE IMPORT
-
+import MessagesPage from '@/pages/MessagesPage';
 
 // Composant pour gérer le layout conditionnel
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -120,7 +120,7 @@ function App() {
             <Route path="/edit-equipment/:id" element={<EditEquipment />} />
 
             <Route path="/bookings/:booking_id/review" element={<BookingReviewPage />} />
-            
+            <Route path="/messages" element={<MessagesPage />} />
           </Route>
         </Routes>
       </AppLayout>

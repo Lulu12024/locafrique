@@ -102,7 +102,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
             size={isMobile ? "sm" : "default"}
           >
             <ClipboardCheck className="h-4 w-4 mr-2" />
-            Demandes reçues
+            Demandes reçuess
           </Button>
           
           {/* SECTION LOCATIONS - Maintenant accessible à tous */}

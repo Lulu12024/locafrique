@@ -42,7 +42,7 @@ export const useBookedDates = (equipmentId: string | undefined) => {
           .from('bookings')
           .select('start_date, end_date, status')
           .eq('equipment_id', equipmentId)
-          .in('status', ['confirmed', 'in_progress']); // ✅ SANS 'pending'
+          .in('status', ['confirmed', 'in_progress']); 
 
         if (error) {
           console.error('❌ Erreur lors de la récupération des réservations:', error);

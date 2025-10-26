@@ -41,6 +41,7 @@ import type { EquipmentReview } from '@/hooks/useEquipmentReviews';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AvailabilityCalendar } from '@/components/booking/AvailabilityCalendar';
 import { useBookedDates } from '@/hooks/useBookedDates';
+import ContactOwnerButton from '@/components/messaging/ContactOwnerButton';
 
 interface SafeImageProps {
   src?: string;
@@ -1024,8 +1025,14 @@ const EquipmentDetail = () => {
                         </div>
                       </div>
                     </button>
-                    
-                    <Button 
+                    <ContactOwnerButton
+                      ownerId={equipment.owner_id}
+                      ownerName={equipment.owner.first_name}
+                      equipmentId={equipment.id}
+                      equipmentTitle={equipment.title}
+                      variant="outline" 
+                    />
+                    {/* <Button 
                       variant="outline" 
                       className={`${
                         isMobile 
@@ -1035,7 +1042,7 @@ const EquipmentDetail = () => {
                     >
                       <MessageSquare className="h-4 w-4 mr-2" />
                       Contacter
-                    </Button>
+                    </Button> */}
                   </div>
                 </CardContent>
               </Card>
@@ -1512,10 +1519,12 @@ const EquipmentDetail = () => {
                           setShowReservationModal(true);
                         }}
                         className="w-full h-12 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
-                        disabled={equipment.status !== 'disponible'}
+                        disabled={equipment.status !== 'disponible' || equipment.owner_id === user?.id}
                       >
                         <Calendar className="h-5 w-5 mr-2" />
-                        {equipment.status === 'disponible' ? 'Réserver' : 'Indisponible'}
+                        {equipment.owner_id === user?.id 
+                          ? 'Votre équipement' 
+                          : equipment.status === 'disponible' ? 'Réserver' : 'Indisponible'}
                       </Button>
 
                       <p className="text-center text-sm text-gray-600 mt-4">
@@ -1613,9 +1622,9 @@ const EquipmentDetail = () => {
                     setShowReservationModal(true);
                   }}
                   className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 ml-4 rounded-lg px-8 py-3"
-                  disabled={equipment.status !== 'disponible'}
+                  disabled={equipment.status !== 'disponible' || equipment.owner_id === user?.id}
                 >
-                  Réserver
+                  {equipment.owner_id === user?.id ? 'Votre équipement' : 'Réserver'}
                 </Button>
               </div>
             </div>

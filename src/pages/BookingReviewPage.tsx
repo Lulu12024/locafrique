@@ -24,7 +24,11 @@ interface BookingData {
 export default function BookingReviewPage() {
   const { booking_id } = useParams<{ booking_id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  
+  // ✅ CORRECTION : Récupérer l'état de chargement
+  const { user, loading: authLoading } = useAuth();
+  
+  console.log("🔍 BookingReviewPage - User:", user?.email, "AuthLoading:", authLoading);  
 
   const [booking, setBooking] = useState<BookingData | null>(null);
   const [rating, setRating] = useState<number>(0);
@@ -35,7 +39,15 @@ export default function BookingReviewPage() {
   const [existingReview, setExistingReview] = useState<any>(null);
 
   useEffect(() => {
+    // ✅ CORRECTION : Attendre que l'authentification soit chargée
+    if (authLoading) {
+      console.log("⏳ Attente du chargement de l'authentification...");
+      return;
+    }
+
+    // ✅ Maintenant on peut vérifier si l'utilisateur est connecté
     if (!user) {
+      console.log("❌ Utilisateur non connecté, redirection vers /auth");
       toast({
         title: "Connexion requise",
         description: "Vous devez être connecté pour laisser un avis",
@@ -45,8 +57,9 @@ export default function BookingReviewPage() {
       return;
     }
 
+    console.log("✅ Utilisateur authentifié, chargement des données...");
     loadBookingData();
-  }, [booking_id, user]);
+  }, [booking_id, user, authLoading]); // ✅ Ajouter authLoading dans les dépendances
 
   const loadBookingData = async () => {
     if (!booking_id) return;
@@ -211,6 +224,18 @@ export default function BookingReviewPage() {
       year: 'numeric'
     });
   };
+
+  // ✅ CORRECTION : Afficher un loader pendant le chargement de l'auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Vérification de l'authentification...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
