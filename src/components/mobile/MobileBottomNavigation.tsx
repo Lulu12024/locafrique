@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Home, Search, User } from 'lucide-react';
@@ -16,7 +16,15 @@ export function MobileBottomNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const { user , profile  } = useAuth();
+  const { user, profile, refreshProfile, loadingProfile } = useAuth();
+
+  // 🔥 FIX: Rafraîchir le profil si undefined alors qu'on a un utilisateur
+  useEffect(() => {
+    if (user && !profile && !loadingProfile) {
+      console.log("🔄 Profil manquant détecté, rafraîchissement...");
+      refreshProfile();
+    }
+  }, [user, profile, loadingProfile, refreshProfile]);
 
   const navItems: NavItem[] = [
     {
@@ -35,17 +43,35 @@ export function MobileBottomNavigation() {
       id: 'profile',
       label: t('nav.profile', 'Profil'),
       icon: User,
-      path: user && profile?.id ? `/owner/myprofile/${profile.id}` : '/auth'
+      path: user ? (profile?.id ? `/owner/myprofile/${profile.id}` : '/profile-loading') : '/auth'
     }
   ];
 
   const handleNavigation = (path: string) => {
+    // 🔥 FIX: Gérer le cas où le profil n'est pas encore chargé
+    if (path === '/profile-loading') {
+      if (user && !profile && !loadingProfile) {
+        console.log("🔄 Forcer le rechargement du profil...");
+        refreshProfile();
+      }
+      // Attendre un peu que le profil se charge
+      setTimeout(() => {
+        if (profile?.id) {
+          navigate(`/owner/myprofile/${profile.id}`);
+        }
+      }, 500);
+      return;
+    }
+    
     navigate(path);
   };
 
   const isActive = (path: string) => {
     if (path === '/') {
       return location.pathname === '/';
+    }
+    if (path === '/profile-loading') {
+      return location.pathname.includes('/myprofile');
     }
     return location.pathname.startsWith(path);
   };
@@ -61,9 +87,11 @@ export function MobileBottomNavigation() {
             <button
               key={item.id}
               onClick={() => handleNavigation(item.path)}
+              disabled={item.id === 'profile' && loadingProfile}
               className={cn(
                 "flex flex-col items-center justify-center px-3 py-1 min-w-0 flex-1 transition-colors duration-200",
-                "touch-manipulation"
+                "touch-manipulation",
+                loadingProfile && item.id === 'profile' && "opacity-50 cursor-wait"
               )}
             >
               <div className={cn(
