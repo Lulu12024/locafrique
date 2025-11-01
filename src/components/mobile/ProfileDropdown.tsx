@@ -20,7 +20,8 @@ import {
   User,
   ClipboardCheck,
   ShoppingCart,
-  Bell
+  Bell,
+  Heart
 } from 'lucide-react';
 import AddEquipmentModal from '../AddEquipmentModal';
 
@@ -93,6 +94,13 @@ const ProfileDropdown: React.FC = () => {
       label: "Vue d'ensemble",
       onClick: () => handleNavigation('/overview')
     },
+
+    {
+      icon: Heart,
+      label: 'Mes favoris',
+      onClick: () => handleNavigation('/favorites')
+    },
+    
     {
       icon: Package,
       label: "Mes annonces",

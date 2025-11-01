@@ -20,6 +20,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useScrollBehavior } from "@/hooks/useScrollBehavior";
 import MobileBanner from "@/components/MobileBanner";
+import { supabase } from "@/integrations/supabase/client"; // ✅ AJOUTÉ
 
 const Index = () => {
   const navigate = useNavigate();
@@ -41,6 +42,7 @@ const Index = () => {
   const [searchQuery, setSearchQuery] = useState<string | undefined>(undefined);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+  // ✅ FONCTION CORRIGÉE: Charge les vraies reviews depuis la base
   const loadData = async () => {
     try {
       setIsLoading(true);
@@ -61,7 +63,50 @@ const Index = () => {
       console.log("📦 Équipements récupérés:", equipments.length);
       console.log("🌍 Localisation utilisateur:", location);
       
-      setFeaturedEquipments(equipments);
+      // ✅ CORRECTION: Charger les VRAIES reviews pour chaque équipement
+      const equipmentsWithRealStats = await Promise.all(
+        equipments.map(async (equipment) => {
+          try {
+            // Charger les reviews de cet équipement
+            const { data: reviews, error: reviewError } = await supabase
+              .from('equipment_reviews')
+              .select('rating')
+              .eq('equipment_id', equipment.id);
+
+            if (reviewError) {
+              console.error('Erreur chargement reviews:', reviewError);
+              return {
+                ...equipment,
+                averageRating: 0,
+                reviewCount: 0
+              };
+            }
+
+            // Calculer la moyenne réelle
+            const reviewCount = reviews?.length || 0;
+            const averageRating = reviewCount > 0
+              ? reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviewCount
+              : 0;
+
+            return {
+              ...equipment,
+              averageRating: Math.round(averageRating * 10) / 10, // 1 décimale
+              reviewCount
+            };
+          } catch (error) {
+            console.error('Erreur traitement reviews:', error);
+            return {
+              ...equipment,
+              averageRating: 0,
+              reviewCount: 0
+            };
+          }
+        })
+      );
+
+      console.log("✅ Équipements avec vraies stats:", equipmentsWithRealStats);
+      
+      setFeaturedEquipments(equipmentsWithRealStats);
       setCategories(categoriesData);
       
     } catch (error: any) {
@@ -72,6 +117,7 @@ const Index = () => {
     }
   };
 
+  // ✅ FONCTION CORRIGÉE: Charge les équipements d'une ville avec vraies reviews
   const loadCityEquipments = async (city: string, query?: string) => {
     try {
       setLoadingCityEquipments(true);
@@ -86,8 +132,47 @@ const Index = () => {
         searchEquipments(searchParams),
         fetchCategories()
       ]);
+
+      // ✅ CORRECTION: Charger les VRAIES reviews pour chaque équipement
+      const equipmentsWithRealStats = await Promise.all(
+        equipments.map(async (equipment) => {
+          try {
+            const { data: reviews, error: reviewError } = await supabase
+              .from('equipment_reviews')
+              .select('rating')
+              .eq('equipment_id', equipment.id);
+
+            if (reviewError) {
+              console.error('Erreur chargement reviews:', reviewError);
+              return {
+                ...equipment,
+                averageRating: 0,
+                reviewCount: 0
+              };
+            }
+
+            const reviewCount = reviews?.length || 0;
+            const averageRating = reviewCount > 0
+              ? reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviewCount
+              : 0;
+
+            return {
+              ...equipment,
+              averageRating: Math.round(averageRating * 10) / 10,
+              reviewCount
+            };
+          } catch (error) {
+            console.error('Erreur traitement reviews:', error);
+            return {
+              ...equipment,
+              averageRating: 0,
+              reviewCount: 0
+            };
+          }
+        })
+      );
       
-      setCityEquipments(equipments);
+      setCityEquipments(equipmentsWithRealStats);
       setCategories(categoriesData);
       setSelectedCity(city);
       setSearchQuery(query);

@@ -1,13 +1,13 @@
-// src/components/AddEquipmentModal.tsx - Version avec upload d'images
+// src/components/AddEquipmentModal.tsx - Version avec upload d'images et fonctionnalités
 
-import React, { useState ,useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Loader2, Upload, X, Camera, AlertCircle } from "lucide-react";
+import { Plus, Loader2, Upload, X, Camera, AlertCircle, CheckCircle, Info } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useEquipments } from "@/hooks/useEquipments";
 import { useStorage } from "@/hooks/useStorage";
@@ -27,11 +27,11 @@ interface Category {
   icon: string;
 }
 
-
 const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }) => {
   const { addEquipment, isLoading } = useEquipments();
   const { uploadImage } = useStorage();
   
+  // ✅ MODIFICATION: Ajout des champs booléens pour les fonctionnalités
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -43,7 +43,13 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
     country: "Bénin",
     condition: "bon",
     brand: "",
-    year: ""
+    year: "",
+    // ✅ NOUVEAUX CHAMPS
+    has_technical_support: false,
+    has_training: false,
+    has_insurance: false,
+    has_delivery: false,
+    has_recent_maintenance: false,
   });
 
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
@@ -54,28 +60,29 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
 
   useEffect(() => {
     const loadCategories = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('id, name, description, icon')
-        .order('order', { ascending: true });
+      try {
+        const { data, error } = await supabase
+          .from('categories')
+          .select('id, name, description, icon')
+          .order('order', { ascending: true });
 
-      if (error) throw error;
-      setCategories(data || []);
-    } catch (error) {
-      console.error('Erreur chargement catégories:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de charger les catégories",
-        variant: "destructive"
-      });
-    }
-  };
+        if (error) throw error;
+        setCategories(data || []);
+      } catch (error) {
+        console.error('Erreur chargement catégories:', error);
+        toast({
+          title: "Erreur",
+          description: "Impossible de charger les catégories",
+          variant: "destructive"
+        });
+      }
+    };
 
-  if (isOpen) {
+    if (isOpen) {
       loadCategories();
     }
   }, [isOpen]);
+
   // Gestion de la sélection d'images
   const handleImageSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -189,7 +196,7 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
     setUploadProgress(0);
 
     try {
-      // Préparer les données pour l'API
+      // ✅ MODIFICATION: Inclure les nouveaux champs de fonctionnalités
       const equipmentData = {
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -201,7 +208,13 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
         country: formData.country,
         condition: formData.condition,
         brand: formData.brand.trim() || undefined,
-        year: formData.year ? Number(formData.year) : undefined
+        year: formData.year ? Number(formData.year) : undefined,
+        // ✅ NOUVEAUX CHAMPS FONCTIONNALITÉS
+        has_technical_support: formData.has_technical_support,
+        has_training: formData.has_training,
+        has_insurance: formData.has_insurance,
+        has_delivery: formData.has_delivery,
+        has_recent_maintenance: formData.has_recent_maintenance,
       };
 
       console.log("📝 Ajout d'équipement via modal:", equipmentData);
@@ -252,7 +265,7 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
         duration: 5000,
       });
 
-      // Réinitialiser le formulaire
+      // ✅ MODIFICATION: Réinitialiser tous les champs y compris les nouveaux
       setFormData({
         title: "",
         description: "",
@@ -264,7 +277,12 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
         country: "Bénin",
         condition: "bon",
         brand: "",
-        year: ""
+        year: "",
+        has_technical_support: false,
+        has_training: false,
+        has_insurance: false,
+        has_delivery: false,
+        has_recent_maintenance: false,
       });
       
       setSelectedImages([]);
@@ -293,14 +311,11 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
+  // ✅ MODIFICATION: Support des valeurs booléennes
+  const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // const categoryOptions = Object.entries(EQUIPMENT_CATEGORIES).map(([key, category]) => ({
-  //   value: key,
-  //   label: category.name
-  // }));
   const categoryOptions = categories.map(category => ({
     value: category.id,
     label: category.name
@@ -422,6 +437,105 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
               </div>
             </div>
           </div>
+
+          {/* ========== ✅ NOUVELLE SECTION: FONCTIONNALITÉS ========== */}
+          <div className="border rounded-lg p-4 bg-gray-50">
+            <div className="flex items-center gap-2 mb-3">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <h3 className="font-semibold text-gray-900">Ce que propose cet équipement</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Cochez les services et avantages inclus avec votre équipement
+            </p>
+            
+            <div className="space-y-3">
+              {/* Support technique */}
+              <div className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  id="has_technical_support"
+                  checked={formData.has_technical_support}
+                  onChange={(e) => handleInputChange('has_technical_support', e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                  disabled={isSubmitting}
+                />
+                <Label htmlFor="has_technical_support" className="text-sm font-normal cursor-pointer flex-1">
+                  Support technique disponible
+                </Label>
+              </div>
+
+              {/* Formation incluse */}
+              <div className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  id="has_training"
+                  checked={formData.has_training}
+                  onChange={(e) => handleInputChange('has_training', e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                  disabled={isSubmitting}
+                />
+                <Label htmlFor="has_training" className="text-sm font-normal cursor-pointer flex-1">
+                  Formation incluse pour l'utilisation
+                </Label>
+              </div>
+
+              {/* Assurance incluse */}
+              <div className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  id="has_insurance"
+                  checked={formData.has_insurance}
+                  onChange={(e) => handleInputChange('has_insurance', e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                  disabled={isSubmitting}
+                />
+                <Label htmlFor="has_insurance" className="text-sm font-normal cursor-pointer flex-1">
+                  Assurance incluse dans le prix
+                </Label>
+              </div>
+
+              {/* Livraison possible */}
+              <div className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  id="has_delivery"
+                  checked={formData.has_delivery}
+                  onChange={(e) => handleInputChange('has_delivery', e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                  disabled={isSubmitting}
+                />
+                <Label htmlFor="has_delivery" className="text-sm font-normal cursor-pointer flex-1">
+                  Livraison possible (peut être payante)
+                </Label>
+              </div>
+
+              {/* Maintenance récente */}
+              <div className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  id="has_recent_maintenance"
+                  checked={formData.has_recent_maintenance}
+                  onChange={(e) => handleInputChange('has_recent_maintenance', e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                  disabled={isSubmitting}
+                />
+                <Label htmlFor="has_recent_maintenance" className="text-sm font-normal cursor-pointer flex-1">
+                  Maintenance récente effectuée
+                </Label>
+              </div>
+            </div>
+
+            {/* Info supplémentaire */}
+            <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200">
+              <p className="text-xs text-blue-800 flex items-start gap-2">
+                <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                <span>
+                  Ces informations seront affichées sur votre annonce. Cochez uniquement les options réellement disponibles.
+                </span>
+              </p>
+            </div>
+          </div>
+          {/* ========== FIN NOUVELLE SECTION ========== */}
 
           {/* Prix */}
           <div className="space-y-4">
@@ -574,7 +688,6 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
                 <p className="text-orange-800 font-medium leading-relaxed">
                   En publiant une annonce, vous reconnaissez être seul responsable de vos transactions et de la remise du bien.
                 </p>
-                
               </div>
             </div>
           </div>

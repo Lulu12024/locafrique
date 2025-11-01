@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Loader2, Save, Upload, X, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Upload, X, Image as ImageIcon, CheckCircle, Info } from 'lucide-react';
 import { useEquipments } from '@/hooks/useEquipments';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
@@ -42,6 +42,38 @@ interface EquipmentImage {
   created_at: string;
 }
 
+// 🔧 PATCH TEMPORAIRE - Type étendu pour inclure les nouveaux champs
+// À retirer après avoir régénéré les types Supabase
+interface ExtendedEquipment {
+  brand: string | null;
+  category: string;
+  city: string;
+  condition: string | null;
+  country: string;
+  created_at: string | null;
+  daily_price: number;
+  deposit_amount: number;
+  description: string;
+  id: string;
+  location: string;
+  moderated_at: string | null;
+  moderated_by: string | null;
+  moderation_feedback: any | null;
+  moderation_status: string | null;
+  owner_id: string;
+  status: string | null;
+  subcategory: string | null;
+  title: string;
+  updated_at: string | null;
+  year: number | null;
+  // ✅ NOUVEAUX CHAMPS
+  has_technical_support?: boolean | null;
+  has_training?: boolean | null;
+  has_insurance?: boolean | null;
+  has_delivery?: boolean | null;
+  has_recent_maintenance?: boolean | null;
+}
+
 export default function EditEquipment() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -60,6 +92,7 @@ export default function EditEquipment() {
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
 
+  // ✅ MODIFICATION: Ajout des champs booléens pour les fonctionnalités
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -73,6 +106,12 @@ export default function EditEquipment() {
     location: '',
     city: 'Cotonou',
     country: 'Bénin',
+    // ✅ NOUVEAUX CHAMPS
+    has_technical_support: false,
+    has_training: false,
+    has_insurance: false,
+    has_delivery: false,
+    has_recent_maintenance: false,
   });
 
   // Charger l'équipement et ses images
@@ -89,7 +128,7 @@ export default function EditEquipment() {
           .select('*')
           .eq('id', id)
           .eq('owner_id', user.id)
-          .single();
+          .single() as { data: ExtendedEquipment | null, error: any };
 
         if (equipmentError) throw equipmentError;
 
@@ -103,7 +142,7 @@ export default function EditEquipment() {
           return;
         }
 
-        // Remplir le formulaire
+        // ✅ MODIFICATION: Remplir le formulaire avec les nouveaux champs
         setFormData({
           title: equipment.title || '',
           description: equipment.description || '',
@@ -117,6 +156,12 @@ export default function EditEquipment() {
           location: equipment.location || '',
           city: equipment.city || 'Cotonou',
           country: equipment.country || 'Bénin',
+          // ✅ NOUVEAUX CHAMPS
+          has_technical_support: equipment.has_technical_support || false,
+          has_training: equipment.has_training || false,
+          has_insurance: equipment.has_insurance || false,
+          has_delivery: equipment.has_delivery || false,
+          has_recent_maintenance: equipment.has_recent_maintenance || false,
         });
 
         // Charger les images existantes
@@ -332,7 +377,7 @@ export default function EditEquipment() {
 
       setIsUploadingImages(false);
 
-      // 4. Mise à jour de l'équipement
+      // ✅ MODIFICATION: 4. Mise à jour de l'équipement avec les nouveaux champs
       const { error } = await supabase
         .from('equipments')
         .update({
@@ -348,6 +393,13 @@ export default function EditEquipment() {
           location: formData.location.trim(),
           city: formData.city,
           country: formData.country,
+          
+          // ✅ NOUVEAUX CHAMPS FONCTIONNALITÉS
+          has_technical_support: formData.has_technical_support,
+          has_training: formData.has_training,
+          has_insurance: formData.has_insurance,
+          has_delivery: formData.has_delivery,
+          has_recent_maintenance: formData.has_recent_maintenance,
           
           // Renvoyer en modération
           moderation_status: 'pending',
@@ -418,8 +470,9 @@ export default function EditEquipment() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <Card className="mb-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Images */}
+          <Card>
             <CardHeader>
               <CardTitle>Images de l'équipement</CardTitle>
               <p className="text-sm text-gray-600">
@@ -536,6 +589,7 @@ export default function EditEquipment() {
             </CardContent>
           </Card>
 
+          {/* Informations */}
           <Card>
             <CardHeader>
               <CardTitle>Informations de l'équipement</CardTitle>
@@ -688,38 +742,140 @@ export default function EditEquipment() {
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Boutons */}
-              <div className="flex gap-4 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => navigate('/my-equipments')}
-                  disabled={isSaving}
-                  className="flex-1"
-                >
-                  Annuler
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isSaving || totalImagesAfterChanges === 0}
-                  className="flex-1 bg-green-600 hover:bg-green-700"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      {isUploadingImages ? 'Upload images...' : 'Enregistrement...'}
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      Enregistrer et renvoyer
-                    </>
-                  )}
-                </Button>
-              </div>
             </CardContent>
           </Card>
+
+          {/* ========== ✅ NOUVELLE SECTION: FONCTIONNALITÉS ========== */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                Ce que propose cet équipement
+              </CardTitle>
+              <p className="text-sm text-gray-600 mt-2">
+                Cochez les services et avantages inclus avec votre équipement
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              
+              {/* Support technique */}
+              <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                <input
+                  type="checkbox"
+                  id="has_technical_support"
+                  checked={formData.has_technical_support}
+                  onChange={(e) => setFormData({ ...formData, has_technical_support: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                  disabled={isSaving}
+                />
+                <Label htmlFor="has_technical_support" className="text-sm font-normal cursor-pointer flex-1">
+                  Support technique disponible
+                </Label>
+              </div>
+
+              {/* Formation incluse */}
+              <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                <input
+                  type="checkbox"
+                  id="has_training"
+                  checked={formData.has_training}
+                  onChange={(e) => setFormData({ ...formData, has_training: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                  disabled={isSaving}
+                />
+                <Label htmlFor="has_training" className="text-sm font-normal cursor-pointer flex-1">
+                  Formation incluse pour l'utilisation
+                </Label>
+              </div>
+
+              {/* Assurance incluse */}
+              <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                <input
+                  type="checkbox"
+                  id="has_insurance"
+                  checked={formData.has_insurance}
+                  onChange={(e) => setFormData({ ...formData, has_insurance: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                  disabled={isSaving}
+                />
+                <Label htmlFor="has_insurance" className="text-sm font-normal cursor-pointer flex-1">
+                  Assurance incluse dans le prix
+                </Label>
+              </div>
+
+              {/* Livraison possible */}
+              <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                <input
+                  type="checkbox"
+                  id="has_delivery"
+                  checked={formData.has_delivery}
+                  onChange={(e) => setFormData({ ...formData, has_delivery: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                  disabled={isSaving}
+                />
+                <Label htmlFor="has_delivery" className="text-sm font-normal cursor-pointer flex-1">
+                  Livraison possible (peut être payante)
+                </Label>
+              </div>
+
+              {/* Maintenance récente */}
+              <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                <input
+                  type="checkbox"
+                  id="has_recent_maintenance"
+                  checked={formData.has_recent_maintenance}
+                  onChange={(e) => setFormData({ ...formData, has_recent_maintenance: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                  disabled={isSaving}
+                />
+                <Label htmlFor="has_recent_maintenance" className="text-sm font-normal cursor-pointer flex-1">
+                  Maintenance récente effectuée
+                </Label>
+              </div>
+
+              {/* Info supplémentaire */}
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-xs text-blue-800 flex items-start gap-2">
+                  <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span>
+                    Ces informations seront affichées sur votre annonce. Cochez uniquement les options réellement disponibles pour vos locataires.
+                  </span>
+                </p>
+              </div>
+
+            </CardContent>
+          </Card>
+          {/* ========== FIN NOUVELLE SECTION ========== */}
+
+          {/* Boutons */}
+          <div className="flex gap-4 pb-8">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate('/my-equipments')}
+              disabled={isSaving}
+              className="flex-1"
+            >
+              Annuler
+            </Button>
+            <Button
+              type="submit"
+              disabled={isSaving || totalImagesAfterChanges === 0}
+              className="flex-1 bg-green-600 hover:bg-green-700"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {isUploadingImages ? 'Upload images...' : 'Enregistrement...'}
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Enregistrer et renvoyer
+                </>
+              )}
+            </Button>
+          </div>
         </form>
       </div>
     </div>

@@ -1,111 +1,49 @@
-
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { ArrowLeft, Send, Search, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { useAuth } from '@/hooks/auth';
-import { useMessages } from '@/hooks/useMessages';
-import { formatDistanceToNow } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { useMessagingLogic } from '@/hooks/useMessagingLogic';
 
 const MobileMessaging = () => {
-  const { user, profile } = useAuth();
-  const { fetchUserMessages, loading } = useMessages();
-  const [conversations, setConversations] = useState<any[]>([]);
-  const [selectedConversation, setSelectedConversation] = useState<any>(null);
-  const [newMessage, setNewMessage] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const {
+    user,
+    loading,
+    conversations,
+    selectedConversation,
+    setSelectedConversation,
+    newMessage,
+    setNewMessage,
+    searchTerm,
+    setSearchTerm,
+    handleSendMessage,
+    formatTime,
+    loadMessages
+  } = useMessagingLogic();
 
-  useEffect(() => {
-    if (user) {
-      loadMessages();
-    }
-  }, [user]);
-
-  const loadMessages = async () => {
-    try {
-      const messages = await fetchUserMessages();
-      const groupedConversations = groupMessagesByConversation(messages);
-      setConversations(groupedConversations);
-    } catch (error) {
-      console.error("Erreur lors du chargement des messages:", error);
-    }
-  };
-
-  const groupMessagesByConversation = (messages: any[]) => {
-    const grouped = messages.reduce((acc, message) => {
-      const otherUserId = message.sender_id === user?.id ? message.receiver_id : message.sender_id;
-      if (!acc[otherUserId]) {
-        acc[otherUserId] = {
-          id: otherUserId,
-          messages: [],
-          lastMessage: null,
-          unreadCount: 0,
-          participant: {
-            id: otherUserId,
-            name: 'Utilisateur',
-            avatar: null
-          }
-        };
-      }
-      acc[otherUserId].messages.push(message);
-      if (!acc[otherUserId].lastMessage || new Date(message.created_at) > new Date(acc[otherUserId].lastMessage.created_at)) {
-        acc[otherUserId].lastMessage = message;
-      }
-      if (!message.read && message.receiver_id === user?.id) {
-        acc[otherUserId].unreadCount++;
-      }
-      return acc;
-    }, {});
-
-    return Object.values(grouped).sort((a: any, b: any) => 
-      new Date(b.lastMessage?.created_at || 0).getTime() - new Date(a.lastMessage?.created_at || 0).getTime()
-    );
-  };
-
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedConversation) return;
-    
-    console.log("Envoi du message:", newMessage);
-    setNewMessage('');
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    } else {
-      return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-    }
-  };
-
-  const filteredConversations = conversations.filter(conv => 
-    conv.participant.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Vue de conversation spécifique (style Messenger)
+  // Vue de conversation spécifique (style Messenger avec couleurs vertes)
   if (selectedConversation) {
     return (
-      <div className="flex flex-col h-screen bg-white">
+      <div className="fixed inset-0 z-[9999] flex flex-col h-screen bg-white">
         {/* Header de conversation */}
         <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
           <div className="flex items-center space-x-3">
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setSelectedConversation(null)}
+              onClick={() => {
+                setSelectedConversation(null);
+                // ✅ Rafraîchir les conversations après retour
+                loadMessages();
+              }}
               className="p-2"
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <Avatar className="h-10 w-10">
               <AvatarImage src={selectedConversation.participant.avatar} />
-              <AvatarFallback className="bg-blue-500 text-white">
+              <AvatarFallback className="bg-green-600 text-white">
                 <User className="h-5 w-5" />
               </AvatarFallback>
             </Avatar>
@@ -131,7 +69,7 @@ const MobileMessaging = () => {
                 <div
                   className={`max-w-[75%] px-4 py-2 rounded-2xl ${
                     message.sender_id === user?.id
-                      ? 'bg-blue-500 text-white rounded-br-md'
+                      ? 'bg-green-600 text-white rounded-br-md'
                       : 'bg-white text-gray-900 border border-gray-200 rounded-bl-md'
                   }`}
                 >
@@ -161,7 +99,7 @@ const MobileMessaging = () => {
               onClick={handleSendMessage}
               disabled={!newMessage.trim()}
               size="sm"
-              className="bg-blue-500 hover:bg-blue-600 rounded-full p-2 h-10 w-10"
+              className="bg-green-600 hover:bg-green-700 rounded-full p-2 h-10 w-10"
             >
               <Send className="h-4 w-4" />
             </Button>
@@ -171,9 +109,9 @@ const MobileMessaging = () => {
     );
   }
 
-  // Vue liste des conversations (style Messenger)
+  // Vue liste des conversations (style Messenger avec couleurs vertes)
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex flex-col h-screen bg-white pb-20">
       {/* Header */}
       <div className="px-4 py-4 bg-white border-b border-gray-200">
         <h1 className="text-2xl font-bold text-gray-900 mb-3">Messages</h1>
@@ -194,9 +132,9 @@ const MobileMessaging = () => {
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex justify-center items-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
           </div>
-        ) : filteredConversations.length === 0 ? (
+        ) : conversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4">
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
               <User className="h-10 w-10 text-gray-400" />
@@ -209,7 +147,7 @@ const MobileMessaging = () => {
             </p>
           </div>
         ) : (
-          filteredConversations.map((conversation) => (
+          conversations.map((conversation) => (
             <div
               key={conversation.id}
               onClick={() => setSelectedConversation(conversation)}
@@ -218,7 +156,7 @@ const MobileMessaging = () => {
               <div className="relative">
                 <Avatar className="h-14 w-14">
                   <AvatarImage src={conversation.participant.avatar} />
-                  <AvatarFallback className="bg-blue-500 text-white">
+                  <AvatarFallback className="bg-green-600 text-white">
                     <User className="h-6 w-6" />
                   </AvatarFallback>
                 </Avatar>
@@ -233,7 +171,7 @@ const MobileMessaging = () => {
                   </h3>
                   <div className="flex items-center space-x-2">
                     {conversation.unreadCount > 0 && (
-                      <Badge className="bg-blue-500 text-white rounded-full min-w-[20px] h-5 text-xs flex items-center justify-center">
+                      <Badge className="bg-green-600 text-white rounded-full min-w-[20px] h-5 text-xs flex items-center justify-center">
                         {conversation.unreadCount}
                       </Badge>
                     )}

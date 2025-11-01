@@ -13,7 +13,8 @@ import {
   History, 
   Settings,
   LogOut,
-  ClipboardCheck
+  ClipboardCheck,
+  Heart
 } from 'lucide-react';
 import { useAuth } from '@/hooks/auth';
 import AddEquipmentModal from "@/components/AddEquipmentModal";
@@ -70,6 +71,13 @@ function ProfileDropdown() {
       icon: LayoutDashboard,
       label: 'Vue d\'ensemble',
       onClick: () => handleNavigation('/overview')
+    },
+    
+    // ✅ FAVORIS AJOUTÉ
+    {
+      icon: Heart,
+      label: 'Mes favoris',
+      onClick: () => handleNavigation('/favorites')
     },
     
     // SECTION ÉQUIPEMENTS - Maintenant pour tous

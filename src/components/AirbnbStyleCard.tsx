@@ -1,6 +1,4 @@
-// VERSION SIMPLIFIÉE - Correction rapide pour AirbnbStyleCard.tsx
-// Remplace seulement les parties qui utilisent Math.random()
-
+// AirbnbStyleCard.tsx - CORRIGÉ: Vraies reviews + Pas de dates
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart, Star } from 'lucide-react';
@@ -20,35 +18,9 @@ const AirbnbStyleCard: React.FC<AirbnbStyleCardProps> = ({ equipment }) => {
   
   const isEquipmentFavorite = isFavorite(equipment.id);
 
-  // Générer des données cohérentes basées sur l'ID de l'équipement (ne changent jamais)
-  const stableData = useMemo(() => {
-    // Créer un hash stable basé sur l'ID
-    const hash = equipment.id.split('').reduce((a, b) => {
-      a = ((a << 5) - a) + b.charCodeAt(0);
-      return a & a;
-    }, 0);
-    
-    // Générer une note stable entre 3.8 et 5.0
-    const rating = (Math.abs(hash % 24) / 20) + 3.8;
-    
-    // Générer un nombre d'avis stable
-    const reviewCount = Math.abs(hash % 50) + 5;
-    
-    // Générer des dates stables basées sur la création
-    const createdAt = new Date(equipment.created_at);
-    const startOffset = Math.abs(hash % 30); // Entre 0 et 30 jours
-    const duration = Math.abs(hash % 20) + 7; // Entre 7 et 27 jours
-    
-    const startDate = new Date(createdAt.getTime() + (startOffset * 24 * 60 * 60 * 1000));
-    const endDate = new Date(startDate.getTime() + (duration * 24 * 60 * 60 * 1000));
-    
-    return {
-      rating: parseFloat(rating.toFixed(1)),
-      reviewCount,
-      startDate,
-      endDate
-    };
-  }, [equipment.id, equipment.created_at]);
+  // ✅ Récupérer les vraies stats depuis les props
+  const averageRating = (equipment as any).averageRating || 0;
+  const reviewCount = (equipment as any).reviewCount || 0;
 
   const handleClick = () => {
     navigate(`/equipments/details/${equipment.id}`);
@@ -67,14 +39,6 @@ const AirbnbStyleCard: React.FC<AirbnbStyleCardProps> = ({ equipment }) => {
   const images = Array.isArray(equipment.images) ? equipment.images : [];
   const primaryImage = images.find(img => img.is_primary) || images[0];
   const imageUrl = primaryImage?.image_url || "/placeholder.svg";
-
-  // Formatage des dates
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('fr-FR', { 
-      day: 'numeric', 
-      month: 'short' 
-    });
-  };
 
   return (
     <div 
@@ -112,31 +76,31 @@ const AirbnbStyleCard: React.FC<AirbnbStyleCardProps> = ({ equipment }) => {
         )}
 
         {/* Status indicator */}
-        {equipment.status !== 'disponible' && (
-          <div className={`absolute ${isMobile ? 'bottom-1.5 left-1.5' : 'bottom-2 left-2'}`}>
-            <Badge className={`bg-red-500 text-white ${isMobile ? 'text-xs px-1.5 py-0.5' : 'text-xs px-1.5 py-0.5'}`}>
-              {equipment.status === 'loue' ? 'Loué' : 'Indisponible'}
-            </Badge>
-          </div>
-        )}
+       
       </div>
 
       {/* Content */}
       <div className={`${isMobile ? 'p-2' : 'p-2'}`}>
-        {/* Title and rating - CORRIGÉ */}
+        {/* Title and rating - ✅ VRAIES STATS */}
         <div className="flex items-center justify-between mb-1">
           <h3 className={`font-medium text-gray-900 truncate flex-1 ${isMobile ? 'text-xs' : 'text-xs'}`}>
             {equipment.title}
           </h3>
-          <div className="flex items-center space-x-1 ml-1">
-            <Star className={`${isMobile ? 'h-2.5 w-2.5' : 'h-2.5 w-2.5'} fill-current text-gray-900`} />
-            <span className={`text-gray-900 font-medium ${isMobile ? 'text-xs' : 'text-xs'}`}>
-              {stableData.rating}
+          {reviewCount > 0 ? (
+            <div className="flex items-center space-x-1 ml-1">
+              <Star className={`${isMobile ? 'h-2.5 w-2.5' : 'h-2.5 w-2.5'} fill-current text-gray-900`} />
+              <span className={`text-gray-900 font-medium ${isMobile ? 'text-xs' : 'text-xs'}`}>
+                {averageRating}
+              </span>
+              <span className={`text-gray-500 ${isMobile ? 'text-xs' : 'text-xs'}`}>
+                ({reviewCount})
+              </span>
+            </div>
+          ) : (
+            <span className={`text-gray-500 ml-1 ${isMobile ? 'text-xs' : 'text-xs'}`}>
+              Aucun avis
             </span>
-            <span className={`text-gray-500 ${isMobile ? 'text-xs' : 'text-xs'}`}>
-              ({stableData.reviewCount})
-            </span>
-          </div>
+          )}
         </div>
 
         {/* Location */}
@@ -144,10 +108,7 @@ const AirbnbStyleCard: React.FC<AirbnbStyleCardProps> = ({ equipment }) => {
           {equipment.city ? `${equipment.city}${equipment.country ? `, ${equipment.country}` : ''}` : equipment.country}
         </div>
 
-        {/* Dates - CORRIGÉ */}
-        <div className={`text-gray-500 mb-1 ${isMobile ? 'text-xs' : 'text-xs'}`}>
-          {formatDate(stableData.startDate)} - {formatDate(stableData.endDate)}
-        </div>
+        {/* ❌ DATES RETIRÉES */}
 
         {/* Price */}
         <div className="flex items-baseline space-x-1">

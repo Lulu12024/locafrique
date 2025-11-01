@@ -1,4 +1,4 @@
-// src/pages/EquipmentDetail.tsx - VERSION FINALE CORRIGÉE
+// src/pages/EquipmentDetail.tsx - VERSION CORRIGÉE SANS MÉTRIQUES FAUSSES
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,7 +29,8 @@ import {
   Percent,
   Camera,
   Hammer,
-  Flower
+  Flower,
+  Phone
 } from 'lucide-react';
 import { EquipmentData } from '@/types/supabase';
 import { supabase } from '@/integrations/supabase/client';
@@ -42,6 +43,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { AvailabilityCalendar } from '@/components/booking/AvailabilityCalendar';
 import { useBookedDates } from '@/hooks/useBookedDates';
 import ContactOwnerButton from '@/components/messaging/ContactOwnerButton';
+import { useFavorites } from '@/hooks/useFavorites';
 
 interface SafeImageProps {
   src?: string;
@@ -175,9 +177,9 @@ const EquipmentDetail = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isLiked, setIsLiked] = useState(false);
+  const { addToFavorites, removeFromFavorites, isFavorite } = useFavorites();
   const [showReservationModal, setShowReservationModal] = useState(false);
-  const [viewCount, setViewCount] = useState(0);
+  const [hasPendingBooking, setHasPendingBooking] = useState(false);
   const { fetchEquipmentReviews, fetchOwnerStats } = useEquipmentReviews();
   const [realEquipmentReviews, setRealEquipmentReviews] = useState<EquipmentReview[]>([]);
   const [realOwnerStats, setRealOwnerStats] = useState({ averageRating: 0, totalReviews: 0 });
@@ -264,7 +266,7 @@ const EquipmentDetail = () => {
           
           const { data: ownerData, error: ownerError } = await supabase
             .from('profiles')
-            .select('id, first_name, last_name, avatar_url, created_at')
+            .select('id, first_name, last_name, avatar_url, created_at, phone_number')
             .eq('id', equipmentData.owner_id)
             .maybeSingle();
 
@@ -297,7 +299,7 @@ const EquipmentDetail = () => {
 
         setEquipment(equipmentData);
         await loadEquipmentStats(id);
-        await incrementViewCount(id);
+        await checkPendingBooking(id);
         
         // Charger les équipements similaires
         if (equipmentData.category) {
@@ -313,6 +315,13 @@ const EquipmentDetail = () => {
 
     fetchEquipment();
   }, [id]);
+
+  // Vérifier les réservations en attente quand l'utilisateur change
+  useEffect(() => {
+    if (id) {
+      checkPendingBooking(id);
+    }
+  }, [user, id]);
 
   // Détecter le scroll pour afficher le menu sticky
   useEffect(() => {
@@ -400,8 +409,36 @@ const EquipmentDetail = () => {
     }
   };
 
-  const incrementViewCount = async (equipmentId: string) => {
-    setViewCount(Math.floor(Math.random() * 500) + 100);
+  // Vérifier si l'utilisateur a déjà une réservation en attente
+  const checkPendingBooking = async (equipmentId: string) => {
+    if (!user) {
+      setHasPendingBooking(false);
+      return;
+    }
+
+    try {
+      const { data: pendingBookings, error } = await supabase
+        .from('bookings')
+        .select('id, status')
+        .eq('equipment_id', equipmentId)
+        .eq('renter_id', user.id)
+        .in('status', ['pending', 'confirmed']);
+
+      if (error) {
+        console.error("Erreur vérification réservation:", error);
+        return;
+      }
+
+      // Si on a au moins une réservation en attente ou confirmée
+      const hasPending = pendingBookings && pendingBookings.length > 0;
+      setHasPendingBooking(hasPending);
+      
+      if (hasPending) {
+        console.log(`✅ ${pendingBookings.length} réservation(s) en attente trouvée(s):`, pendingBookings);
+      }
+    } catch (error) {
+      console.error("Erreur inattendue vérification réservation:", error);
+    }
   };
 
   // Charger les équipements similaires
@@ -424,16 +461,15 @@ const EquipmentDetail = () => {
     }
   };
 
-
-  // Fonctions calendrier
-  
-
   const handleReservationSuccess = () => {
     toast({
       title: "🎉 Réservation créée !",
       description: "Votre demande a été envoyée. Commission de 5% appliquée.",
     });
-    if (id) loadEquipmentStats(id);
+    if (id) {
+      loadEquipmentStats(id);
+      checkPendingBooking(id); // Re-vérifier les réservations en attente
+    }
   };
 
   const handleToggleFavorite = async () => {
@@ -445,10 +481,22 @@ const EquipmentDetail = () => {
       });
       return;
     }
-    setIsLiked(!isLiked);
-    toast({
-      title: isLiked ? "Retiré des favoris" : "Ajouté aux favoris"
-    });
+    
+    if (!equipment?.id) return;
+    
+    const isCurrentlyFavorite = isFavorite(equipment.id);
+    
+    if (isCurrentlyFavorite) {
+      await removeFromFavorites(equipment.id);
+      toast({
+        title: "Retiré des favoris"
+      });
+    } else {
+      await addToFavorites(equipment.id);
+      toast({
+        title: "Ajouté aux favoris"
+      });
+    }
   };
 
   const handleShare = async () => {
@@ -573,7 +621,7 @@ const EquipmentDetail = () => {
               onClick={handleToggleFavorite}
               className="p-2 rounded-full hover:bg-gray-100"
             >
-              <Heart className={`h-5 w-5 ${isLiked ? 'fill-red-500 text-red-500' : 'text-gray-700'}`} />
+              <Heart className={`h-5 w-5 ${equipment?.id && isFavorite(equipment.id) ? 'fill-red-500 text-red-500' : 'text-gray-700'}`} />
             </Button>
           </div>
         </div>
@@ -651,12 +699,20 @@ const EquipmentDetail = () => {
                         navigate('/auth');
                         return;
                       }
+                      if (hasPendingBooking) {
+                        toast({
+                          title: "Réservation en attente",
+                          description: "Vous avez déjà une réservation en attente pour cet équipement.",
+                          variant: "destructive"
+                        });
+                        return;
+                      }
                       setShowReservationModal(true);
                     }}
                     className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 shadow-md"
-                    disabled={equipment.status !== 'disponible'}
+                    disabled={equipment.status !== 'disponible' || hasPendingBooking}
                   >
-                    Réserver
+                    {hasPendingBooking ? 'Réservation en attente' : 'Réserver'}
                   </Button>
                 </div>
               )}
@@ -708,13 +764,6 @@ const EquipmentDetail = () => {
                     <Badge className="bg-blue-100 text-blue-800 border-blue-200 block">
                       <Zap className="h-3 w-3 mr-1" />
                       Réservation instantanée
-                    </Badge>
-                  </div>
-                  
-                  <div className="absolute bottom-4 left-4">
-                    <Badge variant="outline" className="bg-white/90">
-                      <Eye className="h-3 w-3 mr-1" />
-                      {viewCount} vues
                     </Badge>
                   </div>
 
@@ -772,13 +821,6 @@ const EquipmentDetail = () => {
                     Réservation instantanée
                   </Badge>
                 </div>
-                
-                <div className="absolute bottom-4 left-4">
-                  <Badge variant="outline" className="bg-white/90">
-                    <Eye className="h-3 w-3 mr-1" />
-                    {viewCount} vues
-                  </Badge>
-                </div>
               </button>
               
               {[1, 2, 3, 4].map((index) => (
@@ -821,7 +863,7 @@ const EquipmentDetail = () => {
                   onClick={handleToggleFavorite}
                   className="bg-white/90 hover:bg-white shadow-md"
                 >
-                  <Heart className={`h-4 w-4 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
+                  <Heart className={`h-4 w-4 ${equipment?.id && isFavorite(equipment.id) ? 'fill-red-500 text-red-500' : ''}`} />
                 </Button>
               </div>
             </div>
@@ -865,10 +907,6 @@ const EquipmentDetail = () => {
                     <Users className="h-5 w-5 mr-1" />
                     <span>{equipmentStats.totalBookings} locations</span>
                   </div>
-                  <div className="flex items-center text-green-600">
-                    <TrendingUp className="h-5 w-5 mr-1" />
-                    <span>96% satisfaction</span>
-                  </div>
                 </div>
               </div>
 
@@ -878,35 +916,52 @@ const EquipmentDetail = () => {
                   {isMobile ? (
                     <>
                       <h3 className="text-lg font-semibold mb-4">Description</h3>
-                      <p className="text-gray-700 leading-relaxed mb-4">
+                      <p className="text-gray-700 leading-relaxed mb-4 whitespace-pre-line">
                         {equipment.description || 'Équipement professionnel de qualité.'}
                       </p>
                       
                       <div className="grid grid-cols-1 gap-4">
+                        {/* Équipement vérifié - toujours affiché */}
                         <div className="flex items-center text-sm">
                           <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
                           <span>Équipement vérifié</span>
                         </div>
-                        <div className="flex items-center text-sm">
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                          <span>Assurance incluse</span>
-                        </div>
-                        <div className="flex items-center text-sm">
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                          <span>Support technique</span>
-                        </div>
-                        <div className="flex items-center text-sm">
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                          <span>Livraison possible</span>
-                        </div>
-                        <div className="flex items-center text-sm">
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                          <span>Formation incluse</span>
-                        </div>
-                        <div className="flex items-center text-sm">
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                          <span>Maintenance récente</span>
-                        </div>
+
+                        {/* Options dynamiques */}
+                        {equipment.has_technical_support && (
+                          <div className="flex items-center text-sm">
+                            <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                            <span>Support technique</span>
+                          </div>
+                        )}
+                        
+                        {equipment.has_training && (
+                          <div className="flex items-center text-sm">
+                            <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                            <span>Formation incluse</span>
+                          </div>
+                        )}
+                        
+                        {equipment.has_insurance && (
+                          <div className="flex items-center text-sm">
+                            <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                            <span>Assurance incluse</span>
+                          </div>
+                        )}
+                        
+                        {equipment.has_delivery && (
+                          <div className="flex items-center text-sm">
+                            <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                            <span>Livraison possible</span>
+                          </div>
+                        )}
+                        
+                        {equipment.has_recent_maintenance && (
+                          <div className="flex items-center text-sm">
+                            <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                            <span>Maintenance récente</span>
+                          </div>
+                        )}
                       </div>
                     </>
                   ) : (
@@ -914,7 +969,7 @@ const EquipmentDetail = () => {
                       <div className="space-y-6">
                         <div>
                           <h3 className="text-xl font-semibold mb-4">À propos de cet équipement</h3>
-                          <p className="text-gray-700 text-base leading-relaxed">
+                          <p className="text-gray-700 text-base leading-relaxed whitespace-pre-line">
                             {equipment.description || 'Équipement professionnel de qualité supérieure, idéal pour vos projets. Matériel régulièrement entretenu et vérifié.'}
                           </p>
                         </div>
@@ -924,30 +979,47 @@ const EquipmentDetail = () => {
                         <div>
                           <h3 className="text-xl font-semibold mb-6">Ce que propose cet équipement</h3>
                           <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                            {/* Équipement vérifié - toujours affiché */}
                             <div className="flex items-center">
                               <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
                               <span className="text-gray-700">Équipement vérifié</span>
                             </div>
-                            <div className="flex items-center">
-                              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-                              <span className="text-gray-700">Assurance incluse</span>
-                            </div>
-                            <div className="flex items-center">
-                              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-                              <span className="text-gray-700">Support technique</span>
-                            </div>
-                            <div className="flex items-center">
-                              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-                              <span className="text-gray-700">Livraison possible</span>
-                            </div>
-                            <div className="flex items-center">
-                              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-                              <span className="text-gray-700">Formation incluse</span>
-                            </div>
-                            <div className="flex items-center">
-                              <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-                              <span className="text-gray-700">Maintenance récente</span>
-                            </div>
+
+                            {/* Options dynamiques - affichées seulement si cochées */}
+                            {equipment.has_technical_support && (
+                              <div className="flex items-center">
+                                <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                                <span className="text-gray-700">Support technique</span>
+                              </div>
+                            )}
+                            
+                            {equipment.has_training && (
+                              <div className="flex items-center">
+                                <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                                <span className="text-gray-700">Formation incluse</span>
+                              </div>
+                            )}
+                            
+                            {equipment.has_insurance && (
+                              <div className="flex items-center">
+                                <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                                <span className="text-gray-700">Assurance incluse</span>
+                              </div>
+                            )}
+                            
+                            {equipment.has_delivery && (
+                              <div className="flex items-center">
+                                <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                                <span className="text-gray-700">Livraison possible</span>
+                              </div>
+                            )}
+                            
+                            {equipment.has_recent_maintenance && (
+                              <div className="flex items-center">
+                                <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                                <span className="text-gray-700">Maintenance récente</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1025,24 +1097,35 @@ const EquipmentDetail = () => {
                         </div>
                       </div>
                     </button>
-                    <ContactOwnerButton
-                      ownerId={equipment.owner_id}
-                      ownerName={equipment.owner.first_name}
-                      equipmentId={equipment.id}
-                      equipmentTitle={equipment.title}
-                      variant="outline" 
-                    />
-                    {/* <Button 
-                      variant="outline" 
-                      className={`${
-                        isMobile 
-                          ? 'w-full py-3' 
-                          : 'ml-3 px-6 py-3'
-                      } border-green-200 text-green-700 hover:bg-green-50`}
-                    >
-                      <MessageSquare className="h-4 w-4 mr-2" />
-                      Contacter
-                    </Button> */}
+                    
+                    {/* Boutons d'action - Responsive */}
+                    <div className={`${isMobile ? 'flex gap-2 w-full' : 'flex gap-2'}`}>
+                      {/* Bouton Appeler (si numéro disponible) */}
+                      {equipment?.owner?.phone_number && (
+                        <Button
+                          asChild
+                          variant="outline"
+                          className={`${isMobile ? 'flex-1' : ''} border-green-600 text-green-600 hover:bg-green-50`}
+                        >
+                          <a href={`tel:${equipment.owner.phone_number}`} className="flex items-center justify-center">
+                            <Phone className="h-4 w-4 mr-2" />
+                            {isMobile ? 'Appeler' : 'Appeler'}
+                          </a>
+                        </Button>
+                      )}
+                      
+                      {/* Bouton Contacter */}
+                      <div className={equipment?.owner?.phone_number && isMobile ? 'flex-1' : ''}>
+                        <ContactOwnerButton
+                          ownerId={equipment.owner_id}
+                          ownerName={equipment.owner.first_name}
+                          equipmentId={equipment.id}
+                          equipmentTitle={equipment.title}
+                          variant="outline"
+                          className={equipment?.owner?.phone_number && isMobile ? 'w-full' : ''}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1093,106 +1176,7 @@ const EquipmentDetail = () => {
                 </CardContent>
               </Card>
 
-              {/* 1. CALENDRIER DE DISPONIBILITÉ */}
-              {/* <Card ref={calendarRef}>
-                <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
-                  <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>
-                    Disponibilité
-                  </h3>
-                  
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-center gap-6 text-sm pb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 bg-white border-2 border-gray-300 rounded"></div>
-                        <span className="text-gray-600">Disponible</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 bg-gray-200 rounded"></div>
-                        <span className="text-gray-600">Réservé</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 bg-gray-100 rounded opacity-50"></div>
-                        <span className="text-gray-600">Passé</span>
-                      </div>
-                    </div>
-
-                    <div className="bg-white border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <button
-                          onClick={previousMonth}
-                          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                          disabled={currentMonth.getMonth() === new Date().getMonth() && currentMonth.getFullYear() === new Date().getFullYear()}
-                        >
-                          <ChevronLeft className="h-5 w-5" />
-                        </button>
-                        
-                        <h4 className="font-semibold text-lg">
-                          {currentMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
-                        </h4>
-                        
-                        <button
-                          onClick={nextMonth}
-                          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                        >
-                          <ChevronRight className="h-5 w-5" />
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-7 gap-1 mb-2">
-                        {['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'].map((day) => (
-                          <div key={day} className="text-center text-sm font-medium text-gray-600 py-2">
-                            {day}
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="grid grid-cols-7 gap-1">
-                        {(() => {
-                          const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentMonth);
-                          const days = [];
-                          
-                          // Cellules vides avant le premier jour
-                          for (let i = 0; i < startingDayOfWeek; i++) {
-                            days.push(
-                              <div key={`empty-${i}`} className="aspect-square"></div>
-                            );
-                          }
-                          
-                          // Jours du mois
-                          for (let day = 1; day <= daysInMonth; day++) {
-                            const date = new Date(year, month, day);
-                            const isBooked = isDateBooked(date);
-                            const isPast = isDatePast(date);
-                            
-                            days.push(
-                              <div
-                                key={day}
-                                className={`
-                                  aspect-square flex items-center justify-center rounded-lg text-sm font-medium
-                                  ${isPast 
-                                    ? 'bg-gray-50 text-gray-400 cursor-not-allowed' 
-                                    : isBooked 
-                                      ? 'bg-gray-200 text-gray-600 cursor-not-allowed' 
-                                      : 'bg-white border-2 border-gray-300 text-gray-900 hover:border-green-500 cursor-pointer'
-                                  }
-                                `}
-                              >
-                                {day}
-                              </div>
-                            );
-                          }
-                          
-                          return days;
-                        })()}
-                      </div>
-                    </div>
-
-                    <p className="text-sm text-gray-600 text-center pt-2">
-                      Les dates en blanc sont disponibles pour la réservation
-                    </p>
-                  </div>
-                </CardContent>
-              </Card> */}
+              {/* CALENDRIER DE DISPONIBILITÉ */}
               <div ref={calendarRef} id="calendar" className="scroll-mt-20">
                 <AvailabilityCalendar 
                   equipmentId={equipment.id}
@@ -1201,7 +1185,7 @@ const EquipmentDetail = () => {
                 />
               </div>
 
-              {/* 2. CARTE DE LOCALISATION */}
+              {/* CARTE DE LOCALISATION */}
               <Card>
                 <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
                   <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>
@@ -1248,7 +1232,7 @@ const EquipmentDetail = () => {
                 </CardContent>
               </Card>
 
-              {/* 3. CONDITIONS & RÈGLES */}
+              {/* CONDITIONS & RÈGLES */}
               <Card>
                 <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
                   <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>
@@ -1337,7 +1321,7 @@ const EquipmentDetail = () => {
                 </CardContent>
               </Card>
 
-              {/* 4. ÉQUIPEMENTS SIMILAIRES */}
+              {/* ÉQUIPEMENTS SIMILAIRES */}
               {similarEquipments.length > 0 && (
                 <Card>
                   <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
@@ -1516,14 +1500,24 @@ const EquipmentDetail = () => {
                             navigate('/auth');
                             return;
                           }
+                          if (hasPendingBooking) {
+                            toast({
+                              title: "Réservation en attente",
+                              description: "Vous avez déjà une réservation en attente pour cet équipement.",
+                              variant: "destructive"
+                            });
+                            return;
+                          }
                           setShowReservationModal(true);
                         }}
                         className="w-full h-12 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
-                        disabled={equipment.status !== 'disponible' || equipment.owner_id === user?.id}
+                        disabled={equipment.status !== 'disponible' || equipment.owner_id === user?.id || hasPendingBooking}
                       >
                         <Calendar className="h-5 w-5 mr-2" />
                         {equipment.owner_id === user?.id 
                           ? 'Votre équipement' 
+                          : hasPendingBooking
+                          ? 'Réservation en attente'
                           : equipment.status === 'disponible' ? 'Réserver' : 'Indisponible'}
                       </Button>
 
@@ -1619,12 +1613,24 @@ const EquipmentDetail = () => {
                       navigate('/auth');
                       return;
                     }
+                    if (hasPendingBooking) {
+                      toast({
+                        title: "Réservation en attente",
+                        description: "Vous avez déjà une réservation en attente pour cet équipement.",
+                        variant: "destructive"
+                      });
+                      return;
+                    }
                     setShowReservationModal(true);
                   }}
                   className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 ml-4 rounded-lg px-8 py-3"
-                  disabled={equipment.status !== 'disponible' || equipment.owner_id === user?.id}
+                  disabled={equipment.status !== 'disponible' || equipment.owner_id === user?.id || hasPendingBooking}
                 >
-                  {equipment.owner_id === user?.id ? 'Votre équipement' : 'Réserver'}
+                  {equipment.owner_id === user?.id 
+                    ? 'Votre équipement' 
+                    : hasPendingBooking
+                    ? 'En attente'
+                    : 'Réserver'}
                 </Button>
               </div>
             </div>

@@ -76,6 +76,12 @@ export interface EquipmentData {
   approved_at?: string | null;
   is_premium?: boolean;
   published_at?: string | null;
+
+  has_technical_support?: boolean;
+  has_training?: boolean;
+  has_insurance?: boolean;
+  has_delivery?: boolean;
+  has_recent_maintenance?: boolean;
 }
 
 export interface EquipmentImageData {

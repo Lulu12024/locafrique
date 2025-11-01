@@ -46,6 +46,12 @@ interface FormState {
   location: string;
   city: string;
   country: string;
+  // ✅ NOUVEAUX CHAMPS POUR LES FONCTIONNALITÉS
+  has_technical_support: boolean;
+  has_training: boolean;
+  has_insurance: boolean;
+  has_delivery: boolean;
+  has_recent_maintenance: boolean;
 }
 
 const defaultFormState: FormState = {
@@ -61,6 +67,12 @@ const defaultFormState: FormState = {
   location: "",
   city: "Cotonou",
   country: "Bénin",
+  // ✅ VALEURS PAR DÉFAUT POUR LES FONCTIONNALITÉS
+  has_technical_support: false,
+  has_training: false,
+  has_insurance: false,
+  has_delivery: false,
+  has_recent_maintenance: false,
 };
 
 const BENIN_CITIES = [
@@ -84,7 +96,7 @@ const CONDITIONS = [
   { value: "usage", label: "Signes d'usage" }
 ];
 
-const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onCancel }) => {
+const AddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onCancel }) => {
   const navigate = useNavigate();
   const { addEquipment, isLoading } = useEquipments();
   const { uploadImage } = useStorage();
@@ -126,7 +138,8 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
     setValidationErrors(errors);
   }, [formData]);
 
-  const handleInputChange = (field: keyof FormState, value: string) => {
+  // ✅ MODIFICATION: Support des valeurs booléennes
+  const handleInputChange = (field: keyof FormState, value: string | boolean) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -204,7 +217,7 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
 
   const validateForm = (): boolean => {
     const requiredFields = ['title', 'description', 'daily_price', 'category'];
-    const missingFields = requiredFields.filter(field => !formData[field as keyof FormState].trim());
+    const missingFields = requiredFields.filter(field => !formData[field as keyof FormState].toString().trim());
 
     if (missingFields.length > 0) {
       toast({
@@ -247,7 +260,7 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
     try {
       console.log("📝 Début de la soumission du formulaire");
 
-      // Préparer les données de l'équipement
+      // ✅ MODIFICATION: Inclure les nouveaux champs de fonctionnalités
       const equipmentData = {
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -260,13 +273,18 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
         condition: formData.condition,
         location: formData.location.trim(),
         city: formData.city,
-        country: formData.country
+        country: formData.country,
+        // ✅ NOUVEAUX CHAMPS FONCTIONNALITÉS
+        has_technical_support: formData.has_technical_support,
+        has_training: formData.has_training,
+        has_insurance: formData.has_insurance,
+        has_delivery: formData.has_delivery,
+        has_recent_maintenance: formData.has_recent_maintenance,
       };
 
       console.log("📦 Données de l'équipement:", equipmentData);
 
       // Étape 1: Créer l'équipement
-      // NOUVELLE INTERFACE : addEquipment retourne directement EquipmentData ou lance une exception
       const createdEquipment = await addEquipment(equipmentData);
       
       console.log("✅ Équipement créé avec succès:", createdEquipment.id);
@@ -278,7 +296,7 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
         
         for (let i = 0; i < images.length; i++) {
           const file = images[i];
-          const isPrimary = i === 0; // Première image = image principale
+          const isPrimary = i === 0;
           
           try {
             console.log(`📸 Upload image ${i + 1}/${images.length}: ${file.name}`);
@@ -291,7 +309,6 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
               console.warn(`⚠️ Échec upload ${file.name}:`, uploadResult.error);
             }
             
-            // Mise à jour de la progress bar
             const progress = 25 + ((i + 1) / images.length) * 75;
             setUploadProgress(progress);
             
@@ -305,7 +322,6 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
 
       setUploadProgress(100);
 
-      // Toast de succès final (déjà affiché par useEquipments, mais on peut ajouter des détails)
       toast({
         title: "🎉 Publication réussie !",
         description: (
@@ -327,11 +343,9 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
       setImagePreviews([]);
       setUploadProgress(0);
 
-      // Callback de succès
       if (onSuccess) {
         onSuccess();
       } else {
-        // Rediriger vers la liste des équipements
         setTimeout(() => {
           navigate('/my-equipments');
         }, 2000);
@@ -340,8 +354,6 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
     } catch (error) {
       console.error("❌ Erreur lors de la soumission:", error);
       
-      // L'erreur a déjà été gérée et affichée par useEquipments
-      // On peut ajouter un toast additionnel si nécessaire
       if (error instanceof Error) {
         console.log("Erreur capturée:", error.message);
       }
@@ -468,6 +480,103 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
             </div>
           </CardContent>
         </Card>
+
+        {/* ========== ✅ NOUVELLE SECTION: FONCTIONNALITÉS ========== */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5" />
+              Ce que propose cet équipement
+            </CardTitle>
+            <p className="text-sm text-gray-600 mt-2">
+              Cochez les services et avantages inclus avec votre équipement
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            
+            {/* Support technique */}
+            <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+              <input
+                type="checkbox"
+                id="has_technical_support"
+                checked={formData.has_technical_support}
+                onChange={(e) => handleInputChange('has_technical_support', e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+              />
+              <Label htmlFor="has_technical_support" className="text-sm font-normal cursor-pointer flex-1">
+                Support technique disponible
+              </Label>
+            </div>
+
+            {/* Formation incluse */}
+            <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+              <input
+                type="checkbox"
+                id="has_training"
+                checked={formData.has_training}
+                onChange={(e) => handleInputChange('has_training', e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+              />
+              <Label htmlFor="has_training" className="text-sm font-normal cursor-pointer flex-1">
+                Formation incluse pour l'utilisation
+              </Label>
+            </div>
+
+            {/* Assurance incluse */}
+            <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+              <input
+                type="checkbox"
+                id="has_insurance"
+                checked={formData.has_insurance}
+                onChange={(e) => handleInputChange('has_insurance', e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+              />
+              <Label htmlFor="has_insurance" className="text-sm font-normal cursor-pointer flex-1">
+                Assurance incluse dans le prix
+              </Label>
+            </div>
+
+            {/* Livraison possible */}
+            <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+              <input
+                type="checkbox"
+                id="has_delivery"
+                checked={formData.has_delivery}
+                onChange={(e) => handleInputChange('has_delivery', e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+              />
+              <Label htmlFor="has_delivery" className="text-sm font-normal cursor-pointer flex-1">
+                Livraison possible (peut être payante)
+              </Label>
+            </div>
+
+            {/* Maintenance récente */}
+            <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+              <input
+                type="checkbox"
+                id="has_recent_maintenance"
+                checked={formData.has_recent_maintenance}
+                onChange={(e) => handleInputChange('has_recent_maintenance', e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+              />
+              <Label htmlFor="has_recent_maintenance" className="text-sm font-normal cursor-pointer flex-1">
+                Maintenance récente effectuée
+              </Label>
+            </div>
+
+            {/* Info supplémentaire */}
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-xs text-blue-800 flex items-start gap-2">
+                <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span>
+                  Ces informations seront affichées sur votre annonce. Cochez uniquement les options réellement disponibles pour vos locataires.
+                </span>
+              </p>
+            </div>
+
+          </CardContent>
+        </Card>
+        {/* ========== FIN NOUVELLE SECTION ========== */}
 
         {/* Tarification */}
         <Card>
@@ -778,4 +887,4 @@ const FixedAddEquipmentForm: React.FC<AddEquipmentFormProps> = ({ onSuccess, onC
   );
 };
 
-export default FixedAddEquipmentForm;
+export default AddEquipmentForm;

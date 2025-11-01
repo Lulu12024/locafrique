@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Heart, Search, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -59,7 +58,7 @@ const Favorites = () => {
 
   return (
     <div className={`min-h-screen bg-gray-50 ${!isMobile ? 'pb-0' : 'pb-20'}`}>
-      <div className="px-4 py-6">
+      <div className={`${isMobile ? 'px-4' : 'max-w-7xl mx-auto px-6'} py-6`}>
         {/* Header */}
         <div className="mb-6">
           <div className="flex items-center space-x-4 mb-4">
@@ -97,7 +96,8 @@ const Favorites = () => {
             ))}
           </div>
         ) : favorites.length > 0 ? (
-          <div className={`grid ${isMobile ? 'grid-cols-2 gap-3' : 'grid-cols-6 gap-4'}`}>
+          // ✅ CENTRÉ: Utilise justify-items-center quand peu d'éléments
+          <div className={`grid ${isMobile ? 'grid-cols-2 gap-3 justify-items-center' : 'grid-cols-6 gap-4 justify-items-center'}`}>
             {favorites.map((favorite) => {
               // Transformer le favori en équipment pour le composant
               const equipment: EquipmentData = {
@@ -106,10 +106,11 @@ const Favorites = () => {
               };
               
               return (
-                <AirbnbStyleCard
-                  key={favorite.id}
-                  equipment={equipment}
-                />
+                <div key={favorite.id} className="w-full max-w-[280px]">
+                  <AirbnbStyleCard
+                    equipment={equipment}
+                  />
+                </div>
               );
             })}
           </div>
