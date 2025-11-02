@@ -89,7 +89,7 @@ const Navbar: React.FC = () => {
               <div className="flex items-center space-x-2">
                 {user && (
                   <>
-                    <ReservationsDropdown />
+                    {/* <ReservationsDropdown /> */}
                     <Button 
                       variant="ghost" 
                       size="sm" 
@@ -146,7 +146,7 @@ const Navbar: React.FC = () => {
               <div className="flex items-center space-x-3">
                 {user && (
                   <>
-                    <ReservationsDropdown />
+                    {/* <ReservationsDropdown /> */}
                     <Button 
                       variant="ghost" 
                       size="sm" 

@@ -164,12 +164,20 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
 
       // 3. Envoyer email
       try {
+        // Email au PROPRIÉTAIRE avec les coordonnées du locataire
         await supabase.functions.invoke('send-booking-accepted-email', {
           body: { booking_id: booking.id }
         });
-        console.log('✅ Email envoyé');
+        console.log('✅ Email envoyé au propriétaire');
+
+        // Email au LOCATAIRE pour confirmer l'acceptation
+        await supabase.functions.invoke('send-booking-accepted-to-renter-email', {
+          body: { booking_id: booking.id }
+        });
+        console.log('✅ Email envoyé au locataire');
+
       } catch (emailError) {
-        console.error('⚠️ Erreur email:', emailError);
+        console.error('⚠️ Erreur lors de l\'envoi des emails:', emailError);
       }
 
       toast({

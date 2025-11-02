@@ -202,7 +202,7 @@ ${renterPhone ? `<tr style="border-bottom:1px solid #e5e7eb;">
 </div>
 
 <div style="text-align:center;margin:30px 0;">
-<a href="https://locafrique.onrender.com/dashboard" style="display:inline-block;background-color:#10b981;color:#ffffff;padding:15px 40px;text-decoration:none;border-radius:8px;font-weight:700;font-size:16px;">Voir la demande</a>
+<a href="https://locafrique.onrender.com/received-bookings" style="display:inline-block;background-color:#10b981;color:#ffffff;padding:15px 40px;text-decoration:none;border-radius:8px;font-weight:700;font-size:16px;">Voir la demande</a>
 </div>
 
 <p style="color:#6b7280;font-size:15px;margin-top:30px;padding:20px;background-color:#f9fafb;border-radius:8px;">💡 <strong>Rappel :</strong> ${paymentStatus === 'Payé' ? 'Le locataire a déjà effectué le paiement. Vous recevrez votre paiement une fois la location confirmée et terminée.' : 'Le paiement sera effectué lors de la remise du matériel.'}</p>

@@ -1,4 +1,4 @@
-// src/pages/OwnerDashboard.tsx - VERSION AVEC VALIDATION DE DATE
+// src/pages/OwnerDashboard.tsx - VERSION RESPONSIVE MOBILE
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/auth';
@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';  // ✅ AJOUT
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Bell, 
   Clock, 
@@ -22,7 +22,7 @@ import {
   Package,
   User,
   MapPin,
-  AlertCircle  // ✅ AJOUT
+  AlertCircle
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
-import { startOfDay } from 'date-fns';  // ✅ AJOUT
+import { startOfDay } from 'date-fns';
 
 interface BookingWithDetails {
   id: string;
@@ -198,14 +198,12 @@ export function OwnerDashboard() {
     }
   };
 
-  // ✅ NOUVELLE FONCTION : Vérifier si la date de début est atteinte
   const canStartRental = (booking: BookingWithDetails): boolean => {
     const today = startOfDay(new Date());
     const startDate = startOfDay(new Date(booking.start_date));
     return today >= startDate;
   };
 
-  // ✅ NOUVELLE FONCTION : Calculer les jours avant le début
   const getDaysUntilStart = (booking: BookingWithDetails): number => {
     const today = startOfDay(new Date());
     const startDate = startOfDay(new Date(booking.start_date));
@@ -213,11 +211,9 @@ export function OwnerDashboard() {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  // Fonction pour démarrer la location
   const handleStartRental = async () => {
     if (!selectedBooking) return;
 
-    // ✅ AJOUT : Vérifier la date avant de démarrer
     if (!canStartRental(selectedBooking)) {
       toast({
         title: "Trop tôt",
@@ -232,7 +228,6 @@ export function OwnerDashboard() {
     try {
       console.log('🚀 Démarrage de la location:', selectedBooking.id);
 
-      // Mettre à jour le statut
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
@@ -243,7 +238,6 @@ export function OwnerDashboard() {
 
       if (updateError) throw updateError;
 
-      // Créer notification pour le locataire
       await supabase
         .from('notifications')
         .insert({
@@ -255,7 +249,6 @@ export function OwnerDashboard() {
           read: false
         });
 
-      // Envoyer email
       try {
         await supabase.functions.invoke('send-rental-started-email', {
           body: { booking_id: selectedBooking.id }
@@ -285,7 +278,6 @@ export function OwnerDashboard() {
     }
   };
 
-  // Fonction pour terminer la location
   const handleCompleteRental = async () => {
     if (!selectedBooking) return;
     
@@ -293,7 +285,6 @@ export function OwnerDashboard() {
     try {
       console.log('🏁 Fin de la location:', selectedBooking.id);
 
-      // Mettre à jour le statut
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
@@ -304,7 +295,6 @@ export function OwnerDashboard() {
 
       if (updateError) throw updateError;
 
-      // Créer notification pour demander l'évaluation
       await supabase
         .from('notifications')
         .insert({
@@ -316,7 +306,6 @@ export function OwnerDashboard() {
           read: false
         });
 
-      // Envoyer email
       try {
         await supabase.functions.invoke('send-rental-completed-email', {
           body: { booking_id: selectedBooking.id }
@@ -346,7 +335,6 @@ export function OwnerDashboard() {
     }
   };
 
-  // Formater les dates
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('fr-FR', {
       day: '2-digit',
@@ -355,13 +343,11 @@ export function OwnerDashboard() {
     });
   };
 
-  // ✅ MODIFIÉ : Composant de carte avec validation de date
   const BookingCardWithActions: React.FC<{ booking: BookingWithDetails }> = ({ booking }) => {
     const canStart = booking.status === 'confirmed';
     const canComplete = booking.status === 'ongoing';
     const showActions = canStart || canComplete;
     
-    // ✅ AJOUT : Vérifier si on peut démarrer (date atteinte)
     const dateReached = canStartRental(booking);
     const daysUntilStart = getDaysUntilStart(booking);
 
@@ -412,7 +398,6 @@ export function OwnerDashboard() {
             </Badge>
           </div>
 
-          {/* ✅ AJOUT : Alerte si la date n'est pas atteinte */}
           {canStart && !dateReached && (
             <Alert className="mb-3 border-orange-200 bg-orange-50">
               <AlertCircle className="h-4 w-4 text-orange-600" />
@@ -431,7 +416,7 @@ export function OwnerDashboard() {
                     setSelectedBooking(booking);
                     setActionType('start');
                   }}
-                  disabled={isProcessing || !dateReached}  // ✅ MODIFIÉ : Désactiver si date pas atteinte
+                  disabled={isProcessing || !dateReached}
                   className={`flex-1 ${
                     dateReached 
                       ? 'bg-blue-600 hover:bg-blue-700' 
@@ -442,12 +427,14 @@ export function OwnerDashboard() {
                   {!dateReached ? (
                     <>
                       <Clock className="h-4 w-4 mr-2" />
-                      Disponible le {new Date(booking.start_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+                      <span className="hidden sm:inline">Disponible le {new Date(booking.start_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>
+                      <span className="sm:hidden">{new Date(booking.start_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>
                     </>
                   ) : (
                     <>
                       <PlayCircle className="h-4 w-4 mr-2" />
-                      Démarrer la location
+                      <span className="hidden sm:inline">Démarrer la location</span>
+                      <span className="sm:hidden">Démarrer</span>
                     </>
                   )}
                 </Button>
@@ -464,7 +451,8 @@ export function OwnerDashboard() {
                   size="sm"
                 >
                   <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Marquer terminée
+                  <span className="hidden sm:inline">Marquer terminée</span>
+                  <span className="sm:hidden">Terminer</span>
                 </Button>
               )}
             </div>
@@ -483,14 +471,14 @@ export function OwnerDashboard() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
+    <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Tableau de bord propriétaire</h1>
-        <Button onClick={loadOwnerBookings} variant="outline" disabled={isLoading}>
+        <h1 className="text-2xl md:text-3xl font-bold">Tableau de bord propriétaire</h1>
+        <Button onClick={loadOwnerBookings} variant="outline" size="sm" disabled={isLoading}>
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Actualisation...
+              <span className="hidden sm:inline">Actualisation...</span>
             </>
           ) : (
             'Actualiser'
@@ -499,89 +487,116 @@ export function OwnerDashboard() {
       </div>
 
       {/* Statistiques */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-4">
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">En attente</p>
-                <p className="text-2xl font-bold text-orange-600">{stats.pendingCount}</p>
+                <p className="text-xs md:text-sm text-gray-500">En attente</p>
+                <p className="text-xl md:text-2xl font-bold text-orange-600">{stats.pendingCount}</p>
               </div>
-              <Clock className="h-8 w-8 text-orange-600" />
+              <Clock className="h-6 w-6 md:h-8 md:w-8 text-orange-600" />
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Confirmées</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.confirmedCount}</p>
+                <p className="text-xs md:text-sm text-gray-500">Confirmées</p>
+                <p className="text-xl md:text-2xl font-bold text-blue-600">{stats.confirmedCount}</p>
               </div>
-              <CheckCircle className="h-8 w-8 text-blue-600" />
+              <CheckCircle className="h-6 w-6 md:h-8 md:w-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">En cours</p>
-                <p className="text-2xl font-bold text-green-600">{stats.ongoingCount}</p>
+                <p className="text-xs md:text-sm text-gray-500">En cours</p>
+                <p className="text-xl md:text-2xl font-bold text-green-600">{stats.ongoingCount}</p>
               </div>
-              <PlayCircle className="h-8 w-8 text-green-600" />
+              <PlayCircle className="h-6 w-6 md:h-8 md:w-8 text-green-600" />
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Terminées</p>
-                <p className="text-2xl font-bold text-gray-600">{stats.completedCount}</p>
+                <p className="text-xs md:text-sm text-gray-500">Terminées</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-600">{stats.completedCount}</p>
               </div>
-              <CheckCircle2 className="h-8 w-8 text-gray-600" />
+              <CheckCircle2 className="h-6 w-6 md:h-8 md:w-8 text-gray-600" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
+        <Card className="col-span-2 md:col-span-1">
+          <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Revenus totaux</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-xs md:text-sm text-gray-500">Revenus totaux</p>
+                <p className="text-lg md:text-2xl font-bold text-green-600">
                   {stats.totalRevenue.toLocaleString()} F
                 </p>
               </div>
-              <Euro className="h-8 w-8 text-green-600" />
+              <Euro className="h-6 w-6 md:h-8 md:w-8 text-green-600" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Onglets des réservations */}
+      {/* ✅ ONGLETS RESPONSIVE AVEC SCROLL HORIZONTAL SUR MOBILE */}
       <Tabs defaultValue="pending" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="pending">
-            En attente ({stats.pendingCount})
-          </TabsTrigger>
-          <TabsTrigger value="confirmed">
-            Confirmées ({stats.confirmedCount})
-          </TabsTrigger>
-          <TabsTrigger value="ongoing">
-            En cours ({stats.ongoingCount})
-          </TabsTrigger>
-          <TabsTrigger value="completed">
-            Terminées ({stats.completedCount})
-          </TabsTrigger>
-          <TabsTrigger value="rejected">
-            Refusées ({stats.rejectedCount})
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
+          <TabsList className="inline-flex w-auto min-w-full md:grid md:w-full md:grid-cols-5 gap-1">
+            <TabsTrigger 
+              value="pending" 
+              className="whitespace-nowrap flex-shrink-0 px-3 md:px-4"
+            >
+              <Clock className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="text-xs md:text-sm">Attente</span>
+              <span className="ml-1">({stats.pendingCount})</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="confirmed" 
+              className="whitespace-nowrap flex-shrink-0 px-3 md:px-4"
+            >
+              <CheckCircle className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="text-xs md:text-sm">Confirmées</span>
+              <span className="ml-1">({stats.confirmedCount})</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="ongoing" 
+              className="whitespace-nowrap flex-shrink-0 px-3 md:px-4"
+            >
+              <PlayCircle className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="text-xs md:text-sm">En cours</span>
+              <span className="ml-1">({stats.ongoingCount})</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="completed" 
+              className="whitespace-nowrap flex-shrink-0 px-3 md:px-4"
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="text-xs md:text-sm">Terminées</span>
+              <span className="ml-1">({stats.completedCount})</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="rejected" 
+              className="whitespace-nowrap flex-shrink-0 px-3 md:px-4"
+            >
+              <XCircle className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="text-xs md:text-sm">Refusées</span>
+              <span className="ml-1">({stats.rejectedCount})</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Onglet En attente */}
         <TabsContent value="pending" className="space-y-4 mt-4">
@@ -673,7 +688,7 @@ export function OwnerDashboard() {
         open={actionType === 'start'} 
         onOpenChange={(open) => !open && setActionType(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-md mx-4">
           <AlertDialogHeader>
             <AlertDialogTitle>Démarrer la location</AlertDialogTitle>
             <AlertDialogDescription>
@@ -700,7 +715,7 @@ export function OwnerDashboard() {
         open={actionType === 'complete'} 
         onOpenChange={(open) => !open && setActionType(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-md mx-4">
           <AlertDialogHeader>
             <AlertDialogTitle>Terminer la location</AlertDialogTitle>
             <AlertDialogDescription>

@@ -1,40 +1,40 @@
-// CRÉER le fichier : /src/components/notifications/NotificationCenter.tsx
-// Composant pour afficher les notifications en temps réel dans la navbar
+// src/components/notifications/NotificationCenter.tsx
+// VERSION AVEC NAVIGATION VERS LES BONNES PAGES
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useNavigate } from 'react-router-dom';
+import { 
+  Bell, 
+  BellRing, 
+  Calendar, 
+  CheckCircle, 
+  AlertCircle, 
+  DollarSign, 
+  Star, 
+  Package, 
+  MessageSquare,
+  Eye,
+  Trash2,
+  Settings
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { 
-  Popover, 
-  PopoverContent, 
-  PopoverTrigger 
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
 } from '@/components/ui/popover';
-import { 
-  Bell,
-  BellRing,
-  Calendar,
-  DollarSign,
-  MessageSquare,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  Package,
-  Star,
-  Settings,
-  X,
-  Eye,
-  MoreHorizontal,
-  Trash2
-} from 'lucide-react';
 import { useNotifications } from '@/hooks/useNotifications';
+import { getNotificationRoute } from '@/utils/notificationNavigation';
 
 interface NotificationCenterProps {
   className?: string;
 }
 
 const NotificationCenter: React.FC<NotificationCenterProps> = ({ className }) => {
+  const navigate = useNavigate();
   const { 
     notifications, 
     loading, 
@@ -50,11 +50,16 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ className }) =>
     const iconMap = {
       new_booking: <Calendar className="h-5 w-5 text-blue-600" />,
       booking_confirmed: <CheckCircle className="h-5 w-5 text-green-600" />,
+      booking_rejected: <AlertCircle className="h-5 w-5 text-red-600" />,
       booking_cancelled: <AlertCircle className="h-5 w-5 text-red-600" />,
+      rental_started: <CheckCircle className="h-5 w-5 text-green-600" />,
+      rental_completed: <Star className="h-5 w-5 text-purple-600" />,
       payment_received: <DollarSign className="h-5 w-5 text-green-600" />,
       review_received: <Star className="h-5 w-5 text-yellow-600" />,
       maintenance_reminder: <Package className="h-5 w-5 text-orange-600" />,
-      message_received: <MessageSquare className="h-5 w-5 text-purple-600" />
+      message_received: <MessageSquare className="h-5 w-5 text-purple-600" />,
+      equipment_approved: <CheckCircle className="h-5 w-5 text-green-600" />,
+      equipment_rejected: <AlertCircle className="h-5 w-5 text-red-600" />,
     };
     return iconMap[type] || <Bell className="h-5 w-5 text-gray-600" />;
   };
@@ -76,13 +81,20 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ className }) =>
     }
   };
 
+  // ✅ FONCTION DE NAVIGATION SELON LE TYPE DE NOTIFICATION
   const handleNotificationClick = (notification: any) => {
+    // Marquer comme lu
     if (!notification.read) {
       markAsRead(notification.id);
     }
     
-    // Ici, vous pourriez naviguer vers la page appropriée
-    console.log('Navigation vers:', notification.booking_id);
+    // Fermer le popover
+    setIsOpen(false);
+    
+    // Naviguer vers la bonne page selon le type
+    const route = getNotificationRoute(notification.type);
+    console.log('📍 Navigation vers:', route, 'pour notification type:', notification.type);
+    navigate(route);
   };
 
   const handleDeleteNotification = (e: React.MouseEvent, notificationId: string) => {
@@ -117,68 +129,51 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ className }) =>
         </Button>
       </PopoverTrigger>
       
-      <PopoverContent 
-        className="w-80 p-0" 
-        align="end"
-        side="bottom"
-        sideOffset={8}
-      >
+      <PopoverContent className="w-96 p-0" align="end">
         <Card className="border-0 shadow-lg">
-          <CardHeader className="pb-3">
+          {/* Header */}
+          <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg flex items-center">
-                <Bell className="h-5 w-5 mr-2" />
-                Notifications
-                {unreadCount > 0 && (
-                  <Badge 
-                    className="ml-2 bg-red-100 text-red-800 hover:bg-red-100"
-                  >
-                    {unreadCount} nouvelles
-                  </Badge>
-                )}
-              </CardTitle>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {unreadCount > 0 
+                    ? `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` 
+                    : 'Tout est à jour'}
+                </p>
+              </div>
               
-              <div className="flex items-center space-x-1">
-                {unreadCount > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={markAllAsRead}
-                    className="text-xs"
-                  >
-                    Tout marquer comme lu
-                  </Button>
-                )}
-                
+              {unreadCount > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsOpen(false)}
+                  onClick={markAllAsRead}
+                  className="text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                 >
-                  <X className="h-4 w-4" />
+                  Tout marquer comme lu
                 </Button>
-              </div>
+              )}
             </div>
-          </CardHeader>
+          </div>
           
           <CardContent className="p-0">
             {loading ? (
-              <div className="p-6 text-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-sm text-gray-600 mt-2">Chargement...</p>
+              <div className="p-8 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+                <p className="text-sm text-gray-500">Chargement...</p>
               </div>
             ) : displayedNotifications.length === 0 ? (
-              <div className="p-6 text-center">
-                <Bell className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-600 font-medium">Aucune notification</p>
-                <p className="text-sm text-gray-500">Vous êtes à jour !</p>
+              <div className="p-8 text-center">
+                <Bell className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm font-medium text-gray-600">Aucune notification</p>
+                <p className="text-xs text-gray-500 mt-1">Vous êtes à jour !</p>
               </div>
             ) : (
-              <div className="max-h-96 overflow-y-auto">
+              <div className="max-h-[28rem] overflow-y-auto">
                 {displayedNotifications.map((notification, index) => (
                   <div key={notification.id}>
                     <div
-                      className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
+                      className={`p-3 cursor-pointer hover:bg-gray-50 transition-colors group ${
                         !notification.read ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
                       }`}
                       onClick={() => handleNotificationClick(notification)}
@@ -254,8 +249,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ className }) =>
                       className="w-full text-sm"
                       onClick={() => {
                         setIsOpen(false);
-                        // Ici, naviguer vers la page complète des notifications
-                        console.log('Navigation vers la page des notifications');
+                        navigate('/overview'); // Ou une page dédiée aux notifications
                       }}
                     >
                       Voir toutes les notifications ({notifications.length})
@@ -274,8 +268,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ className }) =>
               className="w-full text-xs"
               onClick={() => {
                 setIsOpen(false);
-                // Ici, naviguer vers les paramètres de notification
-                console.log('Navigation vers les paramètres');
+                navigate('/settings/notifications');
               }}
             >
               <Settings className="h-3 w-3 mr-2" />

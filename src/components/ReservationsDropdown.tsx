@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar, ChevronDown, Check, X, MessageSquare, ExternalLink, Clock } from "lucide-react";
@@ -13,8 +12,10 @@ import { useAuth } from "@/hooks/auth";
 import { useBookings } from "@/hooks/useBookings";
 import { useUserRoles } from "@/hooks/auth/useUserRoles";
 import { OwnerBooking, RenterBooking } from "@/hooks/bookings/types";
+import { useNavigate } from "react-router-dom";
 
 const ReservationsDropdown: React.FC = () => {
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const { isProprietaire } = useUserRoles(profile);
   const { fetchUserBookings, updateBookingStatus } = useBookings();
@@ -57,7 +58,7 @@ const ReservationsDropdown: React.FC = () => {
 
   if (!user) return null;
 
-  // Filtrer les réservations par statut
+  // ✅ FILTRER LES RÉSERVATIONS AVEC LES VRAIS STATUTS DE LA BD
   const getFilteredBookings = () => {
     const allBookings = [
       ...(bookingsData?.renterBookings || []),
@@ -65,17 +66,28 @@ const ReservationsDropdown: React.FC = () => {
     ];
 
     return {
-      pending: allBookings.filter(b => b.status === 'pending' || b.status === 'en_attente'),
-      negotiating: allBookings.filter(b => b.status === 'negotiating' || b.status === 'en_cours'),
-      published: isProprietaire ? (bookingsData?.ownerBookings || []).filter(b => b.status === 'approved' || b.status === 'confirmée') : [],
-      completed: allBookings.filter(b => b.status === 'completed' || b.status === 'cancelled' || b.status === 'refusée')
+      // En attente de validation
+      pending: allBookings.filter(b => b.status === 'pending'),
+      
+      // Confirmées par le propriétaire
+      confirmed: allBookings.filter(b => b.status === 'confirmed'),
+      
+      // Location en cours
+      ongoing: allBookings.filter(b => b.status === 'ongoing'),
+      
+      // Terminées, refusées ou annulées
+      completed: allBookings.filter(b => 
+        b.status === 'completed' || 
+        b.status === 'rejected' || 
+        b.status === 'cancelled'
+      )
     };
   };
 
   const filteredBookings = bookingsData ? getFilteredBookings() : {
     pending: [],
-    negotiating: [],
-    published: [],
+    confirmed: [],
+    ongoing: [],
     completed: []
   };
 
@@ -89,24 +101,43 @@ const ReservationsDropdown: React.FC = () => {
     });
   };
 
+  // ✅ COULEURS SELON LES VRAIS STATUTS
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending':
-      case 'en_attente':
-        return 'bg-orange-100 text-orange-800';
-      case 'approved':
-      case 'confirmée':
-        return 'bg-green-100 text-green-800';
-      case 'rejected':
-      case 'refusée':
-        return 'bg-red-100 text-red-800';
-      case 'completed':
-        return 'bg-blue-100 text-blue-800';
-      case 'negotiating':
-      case 'en_cours':
         return 'bg-yellow-100 text-yellow-800';
+      case 'confirmed':
+        return 'bg-blue-100 text-blue-800';
+      case 'ongoing':
+        return 'bg-green-100 text-green-800';
+      case 'completed':
+        return 'bg-gray-100 text-gray-800';
+      case 'rejected':
+        return 'bg-red-100 text-red-800';
+      case 'cancelled':
+        return 'bg-orange-100 text-orange-800';
       default:
         return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // ✅ TEXTES DE STATUTS EN FRANÇAIS
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'En attente';
+      case 'confirmed':
+        return 'Confirmée';
+      case 'ongoing':
+        return 'En cours';
+      case 'completed':
+        return 'Terminée';
+      case 'rejected':
+        return 'Refusée';
+      case 'cancelled':
+        return 'Annulée';
+      default:
+        return status;
     }
   };
 
@@ -120,7 +151,7 @@ const ReservationsDropdown: React.FC = () => {
           {booking.equipment.title}
         </h4>
         <Badge className={`text-xs ml-2 ${getStatusColor(booking.status)}`}>
-          {booking.status}
+          {getStatusText(booking.status)}
         </Badge>
       </div>
       
@@ -151,14 +182,15 @@ const ReservationsDropdown: React.FC = () => {
         </div>
       )}
 
-      {(booking.status === 'negotiating' || booking.status === 'en_cours') && (
+      {booking.status === 'ongoing' && (
         <Button
           size="sm"
           variant="outline"
           className="w-full h-7 text-xs mt-2"
+          onClick={() => navigate('/messages')}
         >
           <MessageSquare className="h-3 w-3 mr-1" />
-          Voir conversation
+          Contacter
         </Button>
       )}
     </div>
@@ -201,22 +233,21 @@ const ReservationsDropdown: React.FC = () => {
             <TabsList className="grid w-full grid-cols-4 p-1 m-2 bg-gray-100 rounded-lg">
               <TabsTrigger value="pending" className="text-xs flex items-center">
                 <Clock className="h-3 w-3 mr-1" />
-                En cours ({filteredBookings.pending.length})
+                En attente ({filteredBookings.pending.length})
               </TabsTrigger>
-              <TabsTrigger value="negotiating" className="text-xs">
-                Négociation ({filteredBookings.negotiating.length})
+              <TabsTrigger value="confirmed" className="text-xs">
+                Confirmées ({filteredBookings.confirmed.length})
               </TabsTrigger>
-              {isProprietaire && (
-                <TabsTrigger value="published" className="text-xs">
-                  Publiées ({filteredBookings.published.length})
-                </TabsTrigger>
-              )}
+              <TabsTrigger value="ongoing" className="text-xs">
+                En cours ({filteredBookings.ongoing.length})
+              </TabsTrigger>
               <TabsTrigger value="completed" className="text-xs">
                 Terminées ({filteredBookings.completed.length})
               </TabsTrigger>
             </TabsList>
 
             <div className="max-h-80 overflow-y-auto p-3">
+              {/* ✅ ONGLET EN ATTENTE */}
               <TabsContent value="pending" className="mt-0">
                 {filteredBookings.pending.length === 0 ? (
                   <div className="text-center py-6 text-gray-500 text-sm">
@@ -235,36 +266,37 @@ const ReservationsDropdown: React.FC = () => {
                 )}
               </TabsContent>
 
-              <TabsContent value="negotiating" className="mt-0">
-                {filteredBookings.negotiating.length === 0 ? (
+              {/* ✅ ONGLET CONFIRMÉES */}
+              <TabsContent value="confirmed" className="mt-0">
+                {filteredBookings.confirmed.length === 0 ? (
                   <div className="text-center py-6 text-gray-500 text-sm">
-                    Aucune négociation en cours
+                    Aucune réservation confirmée
                   </div>
                 ) : (
                   <div>
-                    {filteredBookings.negotiating.map((booking) => (
+                    {filteredBookings.confirmed.map((booking) => (
                       <BookingCard key={booking.id} booking={booking} />
                     ))}
                   </div>
                 )}
               </TabsContent>
 
-              {isProprietaire && (
-                <TabsContent value="published" className="mt-0">
-                  {filteredBookings.published.length === 0 ? (
-                    <div className="text-center py-6 text-gray-500 text-sm">
-                      Aucune réservation publiée
-                    </div>
-                  ) : (
-                    <div>
-                      {filteredBookings.published.map((booking) => (
-                        <BookingCard key={booking.id} booking={booking} />
-                      ))}
-                    </div>
-                  )}
-                </TabsContent>
-              )}
+              {/* ✅ ONGLET EN COURS */}
+              <TabsContent value="ongoing" className="mt-0">
+                {filteredBookings.ongoing.length === 0 ? (
+                  <div className="text-center py-6 text-gray-500 text-sm">
+                    Aucune location en cours
+                  </div>
+                ) : (
+                  <div>
+                    {filteredBookings.ongoing.map((booking) => (
+                      <BookingCard key={booking.id} booking={booking} />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
 
+              {/* ✅ ONGLET TERMINÉES */}
               <TabsContent value="completed" className="mt-0">
                 {filteredBookings.completed.length === 0 ? (
                   <div className="text-center py-6 text-gray-500 text-sm">
@@ -289,8 +321,7 @@ const ReservationsDropdown: React.FC = () => {
             className="w-full text-xs"
             onClick={() => {
               setIsOpen(false);
-              // Naviguer vers la vue d'ensemble
-              window.location.href = '/overview';
+              navigate('/my-bookings');
             }}
           >
             <ExternalLink className="h-3 w-3 mr-1" />

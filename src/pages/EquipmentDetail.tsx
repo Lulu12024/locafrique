@@ -251,7 +251,7 @@ const EquipmentDetail = () => {
         }
 
         console.log("✅ Équipement chargé:", equipmentData);
-
+        await checkPendingBooking(id);
         // Charger les images
         const { data: imagesData } = await supabase
           .from('equipment_images')
@@ -299,7 +299,7 @@ const EquipmentDetail = () => {
 
         setEquipment(equipmentData);
         await loadEquipmentStats(id);
-        await checkPendingBooking(id);
+        
         
         // Charger les équipements similaires
         if (equipmentData.category) {

@@ -1,5 +1,8 @@
+// src/components/NotificationBell.tsx
+// VERSION AVEC NAVIGATION VERS LES BONNES PAGES
 
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,18 +14,31 @@ import {
 import { useNotifications } from '@/hooks/useNotifications';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { getNotificationRoute } from '@/utils/notificationNavigation';
 
 const NotificationBell: React.FC = () => {
+  const navigate = useNavigate();
   const { notifications, unreadCount, markAsRead, markAllAsRead, loading } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
 
   console.log('NotificationBell render:', { notifications, unreadCount, loading });
 
-  const handleNotificationClick = (notificationId: string, read: boolean) => {
-    console.log('Notification clicked:', notificationId, 'read:', read);
+  // ✅ FONCTION DE NAVIGATION SELON LE TYPE DE NOTIFICATION
+  const handleNotificationClick = (notificationId: string, read: boolean, type: string) => {
+    console.log('Notification clicked:', notificationId, 'read:', read, 'type:', type);
+    
+    // Marquer comme lu
     if (!read) {
       markAsRead(notificationId);
     }
+    
+    // Fermer le popover
+    setIsOpen(false);
+    
+    // Naviguer vers la bonne page selon le type
+    const route = getNotificationRoute(type);
+    console.log('📍 Navigation vers:', route);
+    navigate(route);
   };
 
   return (
@@ -73,28 +89,30 @@ const NotificationBell: React.FC = () => {
               <div
                 key={notification.id}
                 className={`p-3 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
-                  !notification.read ? 'bg-blue-50' : ''
+                  !notification.read ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
                 }`}
-                onClick={() => handleNotificationClick(notification.id, notification.read)}
+                onClick={() => handleNotificationClick(notification.id, notification.read, notification.type)}
               >
-                <div className="flex items-start space-x-3">
-                  <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-                    !notification.read ? 'bg-blue-500' : 'bg-transparent'
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium text-gray-900 truncate">
-                      {notification.title}
-                    </h4>
-                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-                      {notification.message}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {formatDistanceToNow(new Date(notification.created_at), {
-                        addSuffix: true,
-                        locale: fr
-                      })}
-                    </p>
-                  </div>
+                <div className="flex items-start justify-between mb-1">
+                  <h4 className={`text-sm font-medium ${
+                    !notification.read ? 'text-blue-900 font-semibold' : 'text-gray-900'
+                  }`}>
+                    {notification.title}
+                  </h4>
+                  {!notification.read && (
+                    <span className="flex h-2 w-2 rounded-full bg-blue-600 mt-1 ml-2"></span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-600 line-clamp-2">
+                  {notification.message}
+                </p>
+                <div className="flex items-center mt-1 text-xs text-gray-500">
+                  <span>
+                    {formatDistanceToNow(new Date(notification.created_at), {
+                      addSuffix: true,
+                      locale: fr
+                    })}
+                  </span>
                 </div>
               </div>
             ))
@@ -102,8 +120,16 @@ const NotificationBell: React.FC = () => {
         </div>
         
         {notifications.length > 10 && (
-          <div className="p-3 border-t text-center">
-            <Button variant="ghost" size="sm" className="text-xs">
+          <div className="p-2 border-t">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs"
+              onClick={() => {
+                setIsOpen(false);
+                navigate('/overview');
+              }}
+            >
               Voir toutes les notifications
             </Button>
           </div>

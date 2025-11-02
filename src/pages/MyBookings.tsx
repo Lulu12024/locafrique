@@ -1,35 +1,14 @@
 // REMPLACER COMPLÈTEMENT le fichier : /src/pages/MyBookings.tsx
-// Version corrigée qui évite les jointures problématiques
+// Version simplifiée - Uniquement les réservations en tant que locataire
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw } from 'lucide-react'; 
-
-import { 
-  Calendar,
-  Package,
-  Users,
-  MapPin,
-  DollarSign,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  Plus,
-  Edit,
-  Trash2,
-  Eye,
-  Settings,
-  TrendingUp,
-  CalendarDays,
-  Filter,
-  Loader2,
-  Percent
-} from 'lucide-react';
+import { RefreshCw, Loader2 } from 'lucide-react'; 
+import { Calendar, Package, Users, MapPin } from 'lucide-react';
 import { useAuth } from '@/hooks/auth';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/components/ui/use-toast';
 
 // Types locaux pour ce composant
 interface BookingData {
@@ -49,7 +28,6 @@ interface BookingData {
   automatic_validation?: boolean;
   created_at: string;
   updated_at?: string;
-  userType?: 'renter' | 'owner';
   
   // Relations optionnelles
   equipment?: {
@@ -59,12 +37,6 @@ interface BookingData {
     location: string;
     owner_id: string;
   };
-  renter?: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    phone_number?: string;
-  };
   owner?: {
     id: string;
     first_name: string;
@@ -73,28 +45,15 @@ interface BookingData {
   };
 }
 
-interface EquipmentData {
-  id: string;
-  title: string;
-  category: string;
-  daily_price: number;
-  status: string;
-  location: string;
-  owner_id: string;
-  created_at: string;
-  images?: any[];
-}
-
 export default function MyBookings() {
   const { user } = useAuth();
   const [bookings, setBookings] = useState<BookingData[]>([]);
-  const [equipments, setEquipments] = useState<EquipmentData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.id) {
-      loadAllData();
+      loadBookings();
     }
   }, [user?.id]);
 
@@ -115,7 +74,7 @@ export default function MyBookings() {
         (payload) => {
           console.log('🔔 Changement détecté sur une réservation:', payload);
           // Recharger toutes les données
-          loadAllData();
+          loadBookings();
         }
       )
       .subscribe();
@@ -125,117 +84,65 @@ export default function MyBookings() {
     };
   }, [user?.id]);
   
-  const loadAllData = async () => {
+  const loadBookings = async () => {
+    if (!user?.id) return;
+
     setLoading(true);
     setError(null);
 
     try {
-      console.log('📊 Chargement des données de réservation...');
+      console.log('📅 Chargement des réservations en tant que locataire...');
       
-      await Promise.all([
-        loadBookings(),
-        loadEquipments()
-      ]);
-    } catch (error) {
-      console.error('❌ Erreur lors du chargement des données:', error);
-      setError('Impossible de charger les données');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadBookings = async () => {
-    if (!user?.id) return;
-
-    try {
-      console.log('📅 Chargement des réservations...');
-      
-      // ✅ ÉTAPE 1: Réservations où je suis locataire (SANS jointures)
-      const { data: renterBookings, error: renterError } = await supabase
+      // ✅ ÉTAPE 1: Récupérer mes réservations (SANS jointures)
+      const { data: myBookings, error: bookingsError } = await supabase
         .from('bookings')
         .select('*')
         .eq('renter_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (renterError) {
-        console.error('❌ Erreur réservations locataire:', renterError);
-        throw renterError;
+      if (bookingsError) {
+        console.error('❌ Erreur réservations:', bookingsError);
+        throw bookingsError;
       }
 
-      // ✅ ÉTAPE 2: Récupérer mes équipements
-      const { data: myEquipments, error: equipmentError } = await supabase
-        .from('equipments')
-        .select('*')
-        .eq('owner_id', user.id);
-
-      if (equipmentError) {
-        console.error('❌ Erreur équipements:', equipmentError);
-        throw equipmentError;
+      if (!myBookings || myBookings.length === 0) {
+        console.log('ℹ️ Aucune réservation trouvée');
+        setBookings([]);
+        return;
       }
 
-      // ✅ ÉTAPE 3: Réservations pour mes équipements
-      let ownerBookings: any[] = [];
-      if (myEquipments && myEquipments.length > 0) {
-        const equipmentIds = myEquipments.map(eq => eq.id);
-        
-        const { data: ownerBookingsData, error: ownerError } = await supabase
-          .from('bookings')
-          .select('*')
-          .in('equipment_id', equipmentIds)
-          .order('created_at', { ascending: false });
+      // ✅ ÉTAPE 2: Récupérer les équipements associés
+      const equipmentIds = myBookings.map(b => b.equipment_id);
+      const uniqueEquipmentIds = [...new Set(equipmentIds)];
 
-        if (ownerError) {
-          console.error('❌ Erreur réservations propriétaire:', ownerError);
-          throw ownerError;
-        }
-
-        ownerBookings = ownerBookingsData || [];
-      }
-
-      // ✅ ÉTAPE 4: Récupérer tous les équipements nécessaires
-      const allEquipmentIds = [
-        ...(renterBookings || []).map(b => b.equipment_id),
-        ...(ownerBookings || []).map(b => b.equipment_id)
-      ];
-      const uniqueEquipmentIds = [...new Set(allEquipmentIds)];
-
-      const { data: allEquipments, error: allEquipmentError } = await supabase
+      const { data: equipments, error: equipmentError } = await supabase
         .from('equipments')
         .select('id, title, daily_price, location, owner_id')
         .in('id', uniqueEquipmentIds);
 
-      if (allEquipmentError) {
-        console.error('❌ Erreur équipements:', allEquipmentError);
+      if (equipmentError) {
+        console.error('❌ Erreur équipements:', equipmentError);
       }
 
-      // ✅ ÉTAPE 5: Récupérer tous les profils nécessaires
-      const allUserIds = [
-        ...(renterBookings || []).map(b => b.renter_id),
-        ...(ownerBookings || []).map(b => b.renter_id),
-        ...(allEquipments || []).map(eq => eq.owner_id)
-      ];
-      const uniqueUserIds = [...new Set(allUserIds)].filter(id => id !== user.id);
+      // ✅ ÉTAPE 3: Récupérer les profils des propriétaires
+      const ownerIds = [...new Set((equipments || []).map(eq => eq.owner_id))];
 
-      const { data: allProfiles, error: profileError } = await supabase
+      const { data: owners, error: ownersError } = await supabase
         .from('profiles')
         .select('id, first_name, last_name, phone_number')
-        .in('id', uniqueUserIds);
+        .in('id', ownerIds);
 
-      if (profileError) {
-        console.error('❌ Erreur profils:', profileError);
+      if (ownersError) {
+        console.error('❌ Erreur profils propriétaires:', ownersError);
       }
 
-      // ✅ ÉTAPE 6: Combiner toutes les données côté client
-      const allBookings: BookingData[] = [];
+      // ✅ ÉTAPE 4: Combiner toutes les données côté client
+      const enrichedBookings: BookingData[] = myBookings.map(booking => {
+        const equipment = (equipments || []).find(eq => eq.id === booking.equipment_id);
+        const owner = (owners || []).find(p => p.id === equipment?.owner_id);
 
-      // Traiter les réservations en tant que locataire
-      (renterBookings || []).forEach(booking => {
-        const equipment = (allEquipments || []).find(eq => eq.id === booking.equipment_id);
-        const owner = (allProfiles || []).find(p => p.id === equipment?.owner_id);
-
-        allBookings.push({
+        return {
           ...booking,
-          userType: 'renter',
           equipment: equipment ? {
             id: equipment.id,
             title: equipment.title,
@@ -249,64 +156,17 @@ export default function MyBookings() {
             last_name: owner.last_name,
             phone_number: owner.phone_number
           } : undefined
-        });
+        };
       });
 
-      // Traiter les réservations en tant que propriétaire
-      (ownerBookings || []).forEach(booking => {
-        const equipment = (allEquipments || []).find(eq => eq.id === booking.equipment_id);
-        const renter = (allProfiles || []).find(p => p.id === booking.renter_id);
-
-        allBookings.push({
-          ...booking,
-          userType: 'owner',
-          equipment: equipment ? {
-            id: equipment.id,
-            title: equipment.title,
-            daily_price: equipment.daily_price,
-            location: equipment.location,
-            owner_id: equipment.owner_id
-          } : undefined,
-          renter: renter ? {
-            id: renter.id,
-            first_name: renter.first_name,
-            last_name: renter.last_name,
-            phone_number: renter.phone_number
-          } : undefined
-        });
-      });
-
-      console.log('✅ Réservations chargées:', allBookings.length);
-      setBookings(allBookings);
+      console.log('✅ Réservations chargées:', enrichedBookings.length);
+      setBookings(enrichedBookings);
 
     } catch (error) {
       console.error('❌ Erreur lors du chargement des réservations:', error);
-      throw error;
-    }
-  };
-
-  const loadEquipments = async () => {
-    if (!user?.id) return;
-
-    try {
-      console.log('🏗️ Chargement des équipements...');
-      
-      const { data, error } = await supabase
-        .from('equipments')
-        .select('*')
-        .eq('owner_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('❌ Erreur équipements:', error);
-        throw error;
-      }
-
-      console.log('✅ Équipements chargés:', data?.length || 0);
-      setEquipments(data || []);
-    } catch (error) {
-      console.error('❌ Erreur lors du chargement des équipements:', error);
-      throw error;
+      setError('Impossible de charger les réservations');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -365,7 +225,7 @@ export default function MyBookings() {
         <div className="text-center">
           <h2 className="text-xl font-semibold text-red-600">Erreur</h2>
           <p className="text-gray-600">{error}</p>
-          <Button onClick={loadAllData} className="mt-4">
+          <Button onClick={loadBookings} className="mt-4">
             Réessayer
           </Button>
         </div>
@@ -373,15 +233,12 @@ export default function MyBookings() {
     );
   }
 
-  const renterBookings = bookings.filter(b => b.userType === 'renter');
-  const ownerBookings = bookings.filter(b => b.userType === 'owner');
-
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Mes Réservations</h1>
         <Button
-          onClick={loadAllData}
+          onClick={loadBookings}
           disabled={loading}
           variant="outline"
           size="sm"
@@ -404,107 +261,53 @@ export default function MyBookings() {
         <div className="text-center py-12">
           <Package className="h-16 w-16 mx-auto text-gray-400 mb-4" />
           <h2 className="text-xl font-semibold text-gray-600">Aucune réservation</h2>
-          <p className="text-gray-500 mt-2">Vous n'avez pas encore de réservations</p>
+          <p className="text-gray-500 mt-2">Vous n'avez pas encore effectué de réservations</p>
         </div>
       ) : (
-        <div className="space-y-8">
-          {/* Réservations en tant que locataire */}
-          {renterBookings.length > 0 && (
-            <section>
-              <h2 className="text-2xl font-semibold mb-4 flex items-center">
-                <Users className="h-6 w-6 mr-2" />
-                En tant que locataire ({renterBookings.length})
-              </h2>
-              <div className="grid gap-4">
-                {renterBookings.map((booking) => (
-                  <Card key={booking.id} className="w-full">
-                    <CardHeader>
-                      <div className="flex justify-between items-start">
-                        <CardTitle className="text-lg">
-                          {booking.equipment?.title || 'Équipement inconnu'}
-                        </CardTitle>
-                        <Badge className={getStatusColor(booking.status)}>
-                          {getStatusText(booking.status)}
-                        </Badge>
+        <div className="space-y-4">
+          <h2 className="text-2xl font-semibold mb-4 flex items-center">
+            <Users className="h-6 w-6 mr-2" />
+            Mes locations ({bookings.length})
+          </h2>
+          <div className="grid gap-4">
+            {bookings.map((booking) => (
+              <Card key={booking.id} className="w-full">
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg">
+                      {booking.equipment?.title || 'Équipement inconnu'}
+                    </CardTitle>
+                    <Badge className={getStatusColor(booking.status)}>
+                      {getStatusText(booking.status)}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center text-sm text-gray-600">
+                        <Calendar className="w-4 h-4 mr-2" />
+                        {formatDate(booking.start_date)} - {formatDate(booking.end_date)}
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center text-sm text-gray-600">
-                            <Calendar className="w-4 h-4 mr-2" />
-                            {formatDate(booking.start_date)} - {formatDate(booking.end_date)}
-                          </div>
-                          <div className="flex items-center text-sm text-gray-600">
-                            <MapPin className="w-4 h-4 mr-2" />
-                            {booking.equipment?.location || 'Location inconnue'}
-                          </div>
-                          <div className="flex items-center text-sm text-gray-600">
-                            <Users className="w-4 h-4 mr-2" />
-                            Propriétaire: {booking.owner ? `${booking.owner.first_name} ${booking.owner.last_name}` : 'Inconnu'}
-                          </div>
-                        </div>
-                        <div className="flex flex-col justify-between">
-                          <div className="text-lg font-semibold">
-                            {formatPrice(booking.total_price)}
-                          </div>
-                        </div>
+                      <div className="flex items-center text-sm text-gray-600">
+                        <MapPin className="w-4 h-4 mr-2" />
+                        {booking.equipment?.location || 'Location inconnue'}
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Réservations en tant que propriétaire */}
-          {ownerBookings.length > 0 && (
-            <section>
-              <h2 className="text-2xl font-semibold mb-4 flex items-center">
-                <Package className="h-6 w-6 mr-2" />
-                En tant que propriétaire ({ownerBookings.length})
-              </h2>
-              <div className="grid gap-4">
-                {ownerBookings.map((booking) => (
-                  <Card key={booking.id} className="w-full">
-                    <CardHeader>
-                      <div className="flex justify-between items-start">
-                        <CardTitle className="text-lg">
-                          {booking.equipment?.title || 'Équipement inconnu'}
-                        </CardTitle>
-                        <Badge className={getStatusColor(booking.status)}>
-                          {getStatusText(booking.status)}
-                        </Badge>
+                      <div className="flex items-center text-sm text-gray-600">
+                        <Users className="w-4 h-4 mr-2" />
+                        Propriétaire: {booking.owner ? `${booking.owner.first_name} ${booking.owner.last_name}` : 'Inconnu'}
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center text-sm text-gray-600">
-                            <Calendar className="w-4 h-4 mr-2" />
-                            {formatDate(booking.start_date)} - {formatDate(booking.end_date)}
-                          </div>
-                          <div className="flex items-center text-sm text-gray-600">
-                            <MapPin className="w-4 h-4 mr-2" />
-                            {booking.equipment?.location || 'Location inconnue'}
-                          </div>
-                          <div className="flex items-center text-sm text-gray-600">
-                            <Users className="w-4 h-4 mr-2" />
-                            Locataire: {booking.renter ? `${booking.renter.first_name} ${booking.renter.last_name}` : 'Inconnu'}
-                          </div>
-                        </div>
-                        <div className="flex flex-col justify-between">
-                          <div className="text-lg font-semibold">
-                            {formatPrice(booking.total_price)}
-                          </div>
-                        </div>
+                    </div>
+                    <div className="flex flex-col justify-between">
+                      <div className="text-lg font-semibold">
+                        {formatPrice(booking.total_price)}
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </section>
-          )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
     </div>
