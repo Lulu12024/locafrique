@@ -98,6 +98,7 @@ function App() {
           <Route path="*" element={<NotFound />} />
           <Route path="/wallet-recharge-success" element={<WalletRechargeSuccess />} />
           <Route path="/owner/myprofile/:id" element={<OwnerProfile />} />
+          <Route path="/messages" element={<MessagesPage />} />
           
           {/* Protected Routes */}
           <Route element={<RequireAuth />}>
@@ -120,7 +121,7 @@ function App() {
             <Route path="/edit-equipment/:id" element={<EditEquipment />} />
 
             <Route path="/bookings/:booking_id/review" element={<BookingReviewPage />} />
-            <Route path="/messages" element={<MessagesPage />} />
+            
           </Route>
         </Routes>
       </AppLayout>

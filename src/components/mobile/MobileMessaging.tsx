@@ -34,8 +34,8 @@ const MobileMessaging = () => {
               size="sm"
               onClick={() => {
                 setSelectedConversation(null);
-                // ✅ Rafraîchir les conversations après retour
-                loadMessages();
+                // ✅ Forcer le rafraîchissement de la page
+                setTimeout(() => window.location.reload(), 100);
               }}
               className="p-2"
             >
@@ -51,7 +51,6 @@ const MobileMessaging = () => {
               <h3 className="font-semibold text-gray-900">
                 {selectedConversation.participant.name}
               </h3>
-              <p className="text-xs text-green-500">En ligne</p>
             </div>
           </div>
         </div>
@@ -160,8 +159,6 @@ const MobileMessaging = () => {
                     <User className="h-6 w-6" />
                   </AvatarFallback>
                 </Avatar>
-                {/* Indicateur en ligne */}
-                <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-400 border-2 border-white rounded-full"></div>
               </div>
               
               <div className="ml-3 flex-1 min-w-0">
