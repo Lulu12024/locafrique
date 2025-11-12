@@ -1,5 +1,5 @@
 // src/components/booking/BookingApprovalCard.tsx
-// VERSION AMÉLIORÉE : Modal existant + Validation anti-conflit
+// VERSION COMPLÈTE : Validation anti-conflit + Gestion statut chambres
 
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,12 +23,15 @@ import {
   Mail,
   Loader2,
   CalendarRange,
-  AlertCircle  // ✅ AJOUT
+  AlertCircle,
+  Home,
+  AlertTriangle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
+import { isRoomCategory } from '@/types/supabase';
 
 interface BookingApprovalCardProps {
   booking: any;
@@ -37,20 +40,22 @@ interface BookingApprovalCardProps {
 
 export function BookingApprovalCard({ booking, onStatusChange }: BookingApprovalCardProps) {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isValidating, setIsValidating] = useState(false);  // ✅ AJOUT
+  const [isValidating, setIsValidating] = useState(false);
   const [actionType, setActionType] = useState<'approve' | 'reject' | 'propose' | null>(null);
   const [showProposeModal, setShowProposeModal] = useState(false);
   const [showConfirmApprovalModal, setShowConfirmApprovalModal] = useState(false);
   const [proposedStartDate, setProposedStartDate] = useState<Date | undefined>();
   const [proposedEndDate, setProposedEndDate] = useState<Date | undefined>();
   
-  // ✅ AJOUT : État pour les conflits
   const [conflictError, setConflictError] = useState<{
     message: string;
     conflicts: any[];
   } | null>(null);
 
-  // ✅ NOUVELLE FONCTION : Valider avant d'ouvrir le modal
+  // ✅ Détection si c'est une chambre
+  const isRoom = booking?.equipment?.category ? isRoomCategory(booking.equipment.category) : false;
+
+  // ✅ Validation avant approbation
   const validateBeforeApproval = async () => {
     setIsValidating(true);
     setConflictError(null);
@@ -58,7 +63,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     try {
       console.log('🔍 Validation de la réservation:', booking.id);
 
-      // Appeler la fonction Edge de validation
       const { data, error } = await supabase.functions.invoke(
         'validate-booking-approval',
         {
@@ -76,7 +80,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
         return false;
       }
 
-      // Si pas valide, afficher l'erreur
       if (!data.valid) {
         console.log('❌ Validation échouée:', data);
         
@@ -96,7 +99,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
         return false;
       }
 
-      // Validation OK
       console.log('✅ Validation réussie');
       return true;
 
@@ -113,7 +115,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     }
   };
 
-  // ✅ MODIFIÉ : Valider AVANT d'ouvrir le modal
   const handleApproveClick = async () => {
     const isValid = await validateBeforeApproval();
     if (isValid) {
@@ -129,7 +130,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     try {
       console.log('✅ Démarrage acceptation de la réservation:', booking.id);
 
-      // 1. Mettre à jour le statut avec 'confirmed' (pas 'approved')
+      // 1. Mettre à jour le statut de la réservation
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
@@ -146,14 +147,33 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
 
       console.log('✅ Statut mis à jour avec succès');
 
-      // 2. Créer notification pour le locataire
+      // ✅ 2. Si c'est une chambre, la marquer comme indisponible
+      if (isRoom) {
+        console.log('🏠 Chambre détectée - Mise à jour du statut en indisponible');
+        
+        const { error: equipmentError } = await supabase
+          .from('equipments')
+          .update({ status: 'indisponible' })
+          .eq('id', booking.equipment_id);
+
+        if (equipmentError) {
+          console.error('❌ Erreur mise à jour statut chambre:', equipmentError);
+          throw equipmentError;
+        }
+
+        console.log('✅ Chambre marquée comme indisponible');
+      }
+
+      // 3. Créer notification pour le locataire
       const { error: notifError } = await supabase
         .from('notifications')
         .insert({
           user_id: booking.renter_id,
           type: 'booking_confirmed',
-          title: 'Réservation confirmée',
-          message: `Votre demande pour "${booking.equipment?.title}" a été acceptée.`,
+          title: isRoom ? 'Demande de bail acceptée' : 'Réservation confirmée',
+          message: isRoom 
+            ? `Votre demande de bail pour "${booking.equipment?.title}" a été acceptée.`
+            : `Votre demande pour "${booking.equipment?.title}" a été acceptée.`,
           booking_id: booking.id,
           read: false
         });
@@ -162,15 +182,13 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
         console.error('⚠️ Erreur notification:', notifError);
       }
 
-      // 3. Envoyer email
+      // 4. Envoyer emails
       try {
-        // Email au PROPRIÉTAIRE avec les coordonnées du locataire
         await supabase.functions.invoke('send-booking-accepted-email', {
           body: { booking_id: booking.id }
         });
         console.log('✅ Email envoyé au propriétaire');
 
-        // Email au LOCATAIRE pour confirmer l'acceptation
         await supabase.functions.invoke('send-booking-accepted-to-renter-email', {
           body: { booking_id: booking.id }
         });
@@ -181,8 +199,10 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
       }
 
       toast({
-        title: "✅ Réservation acceptée",
-        description: "Le locataire a été notifié.",
+        title: isRoom ? "✅ Demande de bail acceptée" : "✅ Réservation acceptée",
+        description: isRoom 
+          ? "Le locataire a été notifié et le logement est maintenant indisponible."
+          : "Le locataire a été notifié.",
         duration: 5000
       });
 
@@ -202,7 +222,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     }
   };
 
-  // ❌ REFUSER LA RÉSERVATION
   const handleReject = async () => {
     setIsProcessing(true);
     setActionType('reject');
@@ -231,8 +250,10 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
         .insert({
           user_id: booking.renter_id,
           type: 'booking_rejected',
-          title: 'Réservation refusée',
-          message: `Votre demande pour "${booking.equipment?.title}" a été refusée.`,
+          title: isRoom ? 'Demande de bail refusée' : 'Réservation refusée',
+          message: isRoom
+            ? `Votre demande de bail pour "${booking.equipment?.title}" a été refusée.`
+            : `Votre demande pour "${booking.equipment?.title}" a été refusée.`,
           booking_id: booking.id,
           read: false
         });
@@ -251,7 +272,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
       }
 
       toast({
-        title: "Réservation refusée",
+        title: isRoom ? "Demande de bail refusée" : "Réservation refusée",
         description: "Le locataire a été notifié.",
         duration: 5000
       });
@@ -272,7 +293,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     }
   };
 
-  // 📅 PROPOSER UNE AUTRE DATE
   const handleProposeDate = () => {
     setShowProposeModal(true);
   };
@@ -323,7 +343,6 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
     }
   };
 
-  // Formater les dates
   const formatDateDisplay = (dateStr: string) => {
     try {
       return format(new Date(dateStr), 'dd MMMM yyyy', { locale: fr });
@@ -344,6 +363,14 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
         'border-l-red-500'
       }`}>
         <CardHeader className="pb-3">
+          {/* ✅ Badge type chambre */}
+          {isRoom && isPending && (
+            <Badge className="mb-2 bg-blue-100 text-blue-800 w-fit">
+              <Home className="h-3 w-3 mr-1" />
+              Demande de bail
+            </Badge>
+          )}
+
           <div className="flex items-start justify-between">
             <div className="flex items-center space-x-3">
               <Avatar className="h-12 w-12">
@@ -398,7 +425,9 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
           {/* Détails de la réservation */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <h5 className="font-medium text-sm text-gray-700 mb-1">Équipement</h5>
+              <h5 className="font-medium text-sm text-gray-700 mb-1">
+                {isRoom ? 'Logement' : 'Équipement'}
+              </h5>
               <p className="text-sm font-semibold">{booking.equipment?.title}</p>
             </div>
             <div>
@@ -412,10 +441,15 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
           {/* Méthode de livraison */}
           {booking.delivery_method && (
             <div>
-              <h5 className="font-medium text-sm text-gray-700 mb-1">Livraison</h5>
+              <h5 className="font-medium text-sm text-gray-700 mb-1">
+                {isRoom ? 'Visite' : 'Livraison'}
+              </h5>
               <p className="flex items-center text-sm">
                 <MapPin className="h-3 w-3 mr-1" />
-                {booking.delivery_method === 'pickup' ? 'Retrait sur place' : 'Livraison'}
+                {booking.delivery_method === 'pickup' 
+                  ? (isRoom ? 'Visite sur place' : 'Retrait sur place')
+                  : (isRoom ? 'Visite virtuelle' : 'Livraison')
+                }
                 {booking.delivery_address && ` - ${booking.delivery_address}`}
               </p>
             </div>
@@ -424,14 +458,16 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
           {/* Demandes spéciales */}
           {booking.special_requests && (
             <div>
-              <h5 className="font-medium text-sm text-gray-700 mb-1">Demandes spéciales</h5>
+              <h5 className="font-medium text-sm text-gray-700 mb-1">
+                {isRoom ? 'Message du locataire' : 'Demandes spéciales'}
+              </h5>
               <p className="text-sm bg-gray-50 p-2 rounded">
                 {booking.special_requests}
               </p>
             </div>
           )}
 
-          {/* ✅ NOUVELLE ALERTE DE CONFLIT */}
+          {/* ✅ Alerte de conflit */}
           {conflictError && (
             <Alert variant="destructive" className="mt-4">
               <AlertCircle className="h-4 w-4" />
@@ -452,6 +488,19 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
                 </div>
                 <p className="mt-3 text-xs italic">
                   💡 Cette réservation ne peut pas être acceptée car les dates chevauchent une location déjà confirmée ou en cours.
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* ✅ Alerte chambre */}
+          {isRoom && isPending && !conflictError && (
+            <Alert className="border-amber-200 bg-amber-50">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-900">
+                <p className="font-medium text-sm">Attention - Demande de bail</p>
+                <p className="text-xs mt-1">
+                  En acceptant, ce logement sera automatiquement marqué comme <strong>indisponible</strong> et retiré des recherches jusqu'à la fin du bail.
                 </p>
               </AlertDescription>
             </Alert>
@@ -478,7 +527,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
                 ) : (
                   <>
                     <CheckCircle className="mr-2 h-4 w-4" />
-                    Accepter la demande
+                    {isRoom ? 'Accepter la demande de bail' : 'Accepter la demande'}
                   </>
                 )}
               </Button>
@@ -520,7 +569,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
               <div className="flex items-center">
                 <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
                 <AlertDescription className="text-green-700">
-                  ✅ Réservation confirmée - En cours
+                  ✅ {isRoom ? 'Bail confirmé - En cours' : 'Réservation confirmée - En cours'}
                 </AlertDescription>
               </div>
             </Alert>
@@ -532,7 +581,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
               <div className="flex items-center">
                 <XCircle className="h-4 w-4 text-red-600 mr-2" />
                 <AlertDescription className="text-red-700">
-                  ❌ Réservation refusée
+                  ❌ {isRoom ? 'Demande de bail refusée' : 'Réservation refusée'}
                 </AlertDescription>
               </div>
             </Alert>
@@ -540,13 +589,13 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
         </CardContent>
       </Card>
 
-      {/* MODAL DE CONFIRMATION AVANT APPROBATION (votre modal existant) */}
+      {/* MODAL DE CONFIRMATION */}
       <Dialog open={showConfirmApprovalModal} onOpenChange={setShowConfirmApprovalModal}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center space-x-2">
               <AlertDescription className="text-orange-600">⚠️</AlertDescription>
-              <span>Confirmer l'acceptation</span>
+              <span>{isRoom ? 'Confirmer l\'acceptation du bail' : 'Confirmer l\'acceptation'}</span>
             </DialogTitle>
           </DialogHeader>
           
@@ -561,11 +610,26 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
             </AlertDescription>
           </Alert>
 
+          {/* ✅ Alerte spécifique chambres */}
+          {isRoom && (
+            <Alert className="border-blue-200 bg-blue-50">
+              <Home className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-900">
+                <p className="font-semibold text-sm">ℹ️ Logement</p>
+                <p className="text-xs mt-1">
+                  Votre logement sera automatiquement marqué comme <strong>indisponible</strong> et ne sera plus visible dans les recherches jusqu'à la fin du bail.
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-            <p className="text-sm font-medium text-gray-700">Récapitulatif de la réservation :</p>
+            <p className="text-sm font-medium text-gray-700">
+              Récapitulatif {isRoom ? 'du bail' : 'de la réservation'} :
+            </p>
             <div className="text-sm text-gray-600 space-y-1">
               <p>• Locataire : <span className="font-medium">{booking.renter?.first_name} {booking.renter?.last_name}</span></p>
-              <p>• Équipement : <span className="font-medium">{booking.equipment?.title}</span></p>
+              <p>• {isRoom ? 'Logement' : 'Équipement'} : <span className="font-medium">{booking.equipment?.title}</span></p>
               <p>• Période : <span className="font-medium">
                 {format(new Date(booking.start_date), 'dd/MM/yyyy')} - {format(new Date(booking.end_date), 'dd/MM/yyyy')}
               </span></p>
@@ -603,7 +667,7 @@ export function BookingApprovalCard({ booking, onStatusChange }: BookingApproval
         </DialogContent>
       </Dialog>
 
-      {/* Modal pour proposer une autre date */}
+      {/* Modal proposition dates */}
       <Dialog open={showProposeModal} onOpenChange={setShowProposeModal}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>

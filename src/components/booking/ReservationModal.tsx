@@ -1,6 +1,5 @@
 // src/components/booking/ReservationModal.tsx
-// VERSION SANS PAIEMENT : Le paiement KakiaPay est commenté, réservation directe sans payer
-// Pour réactiver le paiement : décommenter les sections marquées /* PAIEMENT */
+// VERSION ADAPTÉE CHAMBRES & ÉQUIPEMENTS
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -8,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,30 +16,18 @@ import { cn } from '@/lib/utils';
 import { 
   CheckCircle, 
   Clock,
-  // CreditCard, /* PAIEMENT */
   Info,
   Zap,
   Upload,
   Calculator,
   Calendar as CalendarIcon,
-  DollarSign
+  Home
 } from 'lucide-react';
 import { useAuth } from '@/hooks/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
-import { DateRangePickerWithBlockedDates } from './DateRangePickerWithBlockedDates';
 import { SingleDatePickerWithBlockedDates } from './SingleDatePickerWithBlockedDates';
-// import { KkiaPayWidget } from '@/components/KkiaPayWidget'; /* PAIEMENT */
-
-/* PAIEMENT - Déclarations TypeScript pour KakiaPay
-declare global {
-  interface Window {
-    openKkiapayWidget: (config: any) => void;
-    addKkiapayListener: (event: string, callback: (response: any) => void) => void;
-    removeKkiapayListener: (event: string, callback: (response: any) => void) => void;
-  }
-}
-*/
+import { isRoomCategory } from '@/types/supabase';
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -66,36 +52,21 @@ function ReservationModal({
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // États pour les dates
-  // const [selectedStartDate, setSelectedStartDate] = useState<Date>(
-  //   startDate ? new Date(startDate) : new Date()
-  // );
-  // const [selectedEndDate, setSelectedEndDate] = useState<Date>(
-  //   endDate ? new Date(endDate) : new Date()
-  // );
-  // const [isStartDateOpen, setIsStartDateOpen] = useState(false);
-  // const [isEndDateOpen, setIsEndDateOpen] = useState(false);
+  // ✅ Détection si c'est une chambre
+  const isRoom = equipment ? isRoomCategory(equipment.category) : false;
+  const itemLabel = isRoom ? 'logement' : 'équipement';
+  const ItemLabel = isRoom ? 'Logement' : 'Équipement';
 
-  // const [selectedDateRange, setSelectedDateRange] = useState<{from: Date | undefined, to: Date | undefined}>(() => {
-  //   const today = new Date();
-  //   const tomorrow = new Date(today);
-  //   tomorrow.setDate(tomorrow.getDate() + 1);
-    
-  //   return {
-  //     from: startDate ? new Date(startDate) : undefined,
-  //     to: endDate ? new Date(endDate) : undefined
-  //   };
-  // });
+  // États pour les dates
   const [selectedStartDate, setSelectedStartDate] = useState<Date | undefined>(
     startDate ? new Date(startDate) : undefined
   );
   const [selectedEndDate, setSelectedEndDate] = useState<Date | undefined>(
     endDate ? new Date(endDate) : undefined
   );
-  /* PAIEMENT - États pour le paiement
-  const [paymentCompleted, setPaymentCompleted] = useState(false);
-  const [kakiaPayTransactionId, setKakiaPayTransactionId] = useState<string>('');
-  */
+
+  // ✅ NOUVEAU: Pour les chambres - durée du bail en mois
+  const [bailDuration, setBailDuration] = useState<number>(1);
 
   const [reservationDetails, setReservationDetails] = useState({
     contactPhone: '',
@@ -109,32 +80,60 @@ function ReservationModal({
 
   const validEquipment = useMemo(() => equipment, [equipment]);
 
-  // Calcul des prix
+  // ✅ Calcul des prix ADAPTÉ pour chambres et équipements
   const feeCalculations = useMemo(() => {
     if (!validEquipment?.daily_price) {
       return {
         baseCost: 0,
         numberOfDays: 0,
+        numberOfMonths: 0,
         commissionAmount: 0,
         platformFee: 0,
         totalWithFees: 0
       };
     }
 
+    // ✅ POUR LES CHAMBRES (bail mensuel)
+    if (isRoom) {
+      if (!selectedStartDate || !bailDuration) {
+        return {
+          baseCost: 0,
+          numberOfDays: 0,
+          numberOfMonths: 0,
+          commissionAmount: 0,
+          platformFee: 0,
+          totalWithFees: 0
+        };
+      }
+
+      const baseCost = validEquipment.daily_price * bailDuration; // daily_price = loyer mensuel
+      const commissionAmount = Math.round(baseCost * 0.05);
+      const platformFee = 500;
+      const totalWithFees = baseCost + commissionAmount + platformFee;
+
+      return {
+        baseCost,
+        numberOfDays: bailDuration * 30, // Approximatif pour affichage
+        numberOfMonths: bailDuration,
+        commissionAmount,
+        platformFee,
+        totalWithFees
+      };
+    }
+
+    // ✅ POUR LES ÉQUIPEMENTS (location journalière)
     if (!selectedStartDate || !selectedEndDate) {
-    return {
-      baseCost: 0,
-      numberOfDays: 0,
-      commissionAmount: 0,
-      platformFee: 0,
-      totalWithFees: 0
-    };
-  }
+      return {
+        baseCost: 0,
+        numberOfDays: 0,
+        numberOfMonths: 0,
+        commissionAmount: 0,
+        platformFee: 0,
+        totalWithFees: 0
+      };
+    }
 
-    const start = selectedStartDate;
-    const end = selectedEndDate;
-
-    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffTime = Math.abs(selectedEndDate.getTime() - selectedStartDate.getTime());
     const numberOfDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
     
     const baseCost = validEquipment.daily_price * numberOfDays;
@@ -145,13 +144,22 @@ function ReservationModal({
     return {
       baseCost,
       numberOfDays,
+      numberOfMonths: 0,
       commissionAmount,
       platformFee,
       totalWithFees
     };
-  }, [validEquipment, selectedStartDate, selectedEndDate]);
+  }, [validEquipment, selectedStartDate, selectedEndDate, bailDuration, isRoom]);
 
-  // Fonctions utilitaires
+  // ✅ Calcul automatique de la date de fin pour les chambres
+  useEffect(() => {
+    if (isRoom && selectedStartDate && bailDuration) {
+      const endDate = new Date(selectedStartDate);
+      endDate.setMonth(endDate.getMonth() + bailDuration);
+      setSelectedEndDate(endDate);
+    }
+  }, [selectedStartDate, bailDuration, isRoom]);
+
   const safeFormatDate = (date: Date | string | undefined, format: 'short' | 'long' = 'short') => {
     if (!date) return 'Date non définie';
     try {
@@ -197,36 +205,39 @@ function ReservationModal({
   };
 
   const nextStep = async () => {
-    // Validations
+    // Validations étape 1
     if (currentStep === 1) {
       if (!selectedStartDate) {
         toast({
           title: "Date de début requise",
-          description: "Veuillez sélectionner une date de début.",
+          description: isRoom ? "Veuillez sélectionner la date de début du bail." : "Veuillez sélectionner une date de début.",
           variant: "destructive"
         });
         return;
       }
 
-      if (!selectedEndDate) {
-        toast({
-          title: "Date de fin requise",
-          description: "Veuillez sélectionner une date de fin.",
-          variant: "destructive"
-        });
-        return;
+      // ✅ Pour les équipements uniquement
+      if (!isRoom) {
+        if (!selectedEndDate) {
+          toast({
+            title: "Date de fin requise",
+            description: "Veuillez sélectionner une date de fin.",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        if (selectedEndDate <= selectedStartDate) {
+          toast({
+            title: "Dates invalides",
+            description: "La date de fin doit être après la date de début.",
+            variant: "destructive"
+          });
+          return;
+        }
       }
 
-      if (selectedEndDate <= selectedStartDate) {
-        toast({
-          title: "Dates invalides",
-          description: "La date de fin doit être après la date de début.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // ✅ AJOUTER CETTE VALIDATION BACKEND
+      // ✅ Validation backend
       console.log('🔍 Validation des dates auprès du serveur...');
       
       try {
@@ -236,7 +247,7 @@ function ReservationModal({
             body: {
               equipment_id: validEquipment.id,
               start_date: selectedStartDate.toISOString(),
-            end_date: selectedEndDate.toISOString(),
+              end_date: selectedEndDate!.toISOString(),
             }
           }
         );
@@ -283,7 +294,7 @@ function ReservationModal({
       if (reservationDetails.deliveryMethod === 'delivery' && !reservationDetails.deliveryAddress) {
         toast({
           title: "Adresse requise",
-          description: "Veuillez fournir une adresse de livraison.",
+          description: isRoom ? "Veuillez confirmer votre adresse." : "Veuillez fournir une adresse de livraison.",
           variant: "destructive"
         });
         return;
@@ -306,7 +317,6 @@ function ReservationModal({
         });
         return;
       }
-      // ✅ SANS PAIEMENT : Créer directement la réservation
       createBookingDirectly();
       return;
     }
@@ -318,81 +328,6 @@ function ReservationModal({
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
-  /* PAIEMENT - Fonction pour ouvrir KakiaPay
-  const handleOpenKakiaPay = () => {
-    if (window.openKkiapayWidget) {
-      window.openKkiapayWidget({
-        amount: feeCalculations.totalWithFees,
-        api_key: import.meta.env.VITE_KAKIAPAY_API_KEY || '8a7c56d02d3011f0844d9be160e8ba91',
-        sandbox: true,
-        email: user?.email,
-        phone: reservationDetails.contactPhone,
-        name: `${user?.user_metadata?.first_name || ''} ${user?.user_metadata?.last_name || ''}`.trim(),
-        data: {
-          bookingData: {
-            equipment_id: validEquipment.id,
-            start_date: selectedStartDate.toISOString().split('T')[0],
-            end_date: selectedEndDate.toISOString().split('T')[0],
-            total_price: feeCalculations.baseCost,
-            deposit_amount: validEquipment.deposit_amount,
-            contact_phone: reservationDetails.contactPhone,
-            delivery_method: reservationDetails.deliveryMethod,
-            delivery_address: reservationDetails.deliveryAddress,
-            special_requests: reservationDetails.specialRequests,
-            identity_number: reservationDetails.identityNumber,
-            commission_amount: feeCalculations.commissionAmount,
-          }
-        }
-      });
-
-      window.addKkiapayListener('success', async (response: any) => {
-        console.log('✅ Paiement réussi:', response);
-        await handleKakiaPaySuccess(response);
-      });
-
-      window.addKkiapayListener('failed', (error: any) => {
-        console.error('❌ Paiement échoué:', error);
-        handleKakiaPayError(error);
-      });
-    } else {
-      toast({
-        title: "Erreur",
-        description: "Le système de paiement n'est pas disponible.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleKakiaPaySuccess = async (response: any) => {
-    console.log('✅ Paiement KakiaPay réussi:', response);
-    setPaymentCompleted(true);
-    setKakiaPayTransactionId(response.transactionId || response.transaction_id);
-    toast({
-      title: "✅ Paiement validé !",
-      description: "Création de votre réservation en cours...",
-    });
-    await createBookingAfterPayment(response.transactionId || response.transaction_id);
-  };
-
-  const handleKakiaPayError = (error: any) => {
-    console.error('❌ Erreur paiement KakiaPay:', error);
-    toast({
-      title: "Erreur de paiement",
-      description: error.message || "Le paiement a échoué. Veuillez réessayer.",
-      variant: "destructive"
-    });
-  };
-
-  const handleKakiaPayCancel = () => {
-    console.log('🚫 Paiement annulé');
-    toast({
-      title: "Paiement annulé",
-      description: "Vous pouvez réessayer quand vous le souhaitez.",
-    });
-  };
-  */ // FIN PAIEMENT
-
-  // ✅ SANS PAIEMENT : Création directe de la réservation
   const createBookingDirectly = async () => {
     if (!user?.id || !validEquipment.id) {
       toast({
@@ -411,7 +346,6 @@ function ReservationModal({
       if (reservationDetails.identityDocument) {
         try {
           const fileExt = reservationDetails.identityDocument.name.split('.').pop() || 'jpg';
-          // ✅ Format correct pour RLS: identity_USER_ID/filename
           const fileName = `identity_${user.id}/${Date.now()}.${fileExt}`;
           
           console.log('📤 Upload document identité:', fileName);
@@ -445,20 +379,17 @@ function ReservationModal({
         }
       }
 
-      // ✅ Créer la réservation SANS PAIEMENT
       const bookingData = {
         equipment_id: validEquipment.id,
         renter_id: user.id,
-        // start_date: selectedStartDate.toISOString().split('T')[0],
-        // end_date: selectedEndDate.toISOString().split('T')[0],
-        start_date: selectedStartDate.toISOString(),
-        end_date: selectedEndDate.toISOString(),
+        start_date: selectedStartDate!.toISOString(),
+        end_date: selectedEndDate!.toISOString(),
         total_price: feeCalculations.baseCost,
         deposit_amount: validEquipment.deposit_amount,
-        status: 'pending', // En attente de validation du propriétaire
-        payment_status: 'pending', // ✅ SANS PAIEMENT : 'pending' au lieu de 'paid'
-        payment_method: null, // ✅ Pas de méthode de paiement pour le moment
-        transaction_id: null, // ✅ Pas de transaction
+        status: 'pending',
+        payment_status: 'pending',
+        payment_method: null,
+        transaction_id: null,
         contact_phone: reservationDetails.contactPhone || '',
         delivery_method: reservationDetails.deliveryMethod || 'pickup',
         delivery_address: reservationDetails.deliveryAddress || null,
@@ -466,7 +397,8 @@ function ReservationModal({
         commission_amount: feeCalculations.commissionAmount,
         platform_fee: feeCalculations.platformFee,
         identity_verified: true,
-        identity_document_url: documentUrl
+        identity_document_url: documentUrl,
+        booking_type: isRoom ? 'lease' : 'rental' // ✅ Type de réservation
       };
 
       const { data: booking, error: bookingError } = await supabase
@@ -479,12 +411,8 @@ function ReservationModal({
         throw bookingError;
       }
 
-      console.log('✅ Réservation créée sans paiement:', booking.id);
+      console.log('✅ Réservation créée:', booking.id);
 
-      // ✅ La notification est maintenant créée dans l'Edge Function (contourne RLS)
-      // Pas besoin de créer la notification ici
-
-      // Envoyer l'email au propriétaire (qui créera aussi la notification)
       try {
         console.log('📧 Envoi email au propriétaire...');
         
@@ -505,7 +433,7 @@ function ReservationModal({
       }
 
       toast({
-        title: "🎉 Réservation créée !",
+        title: isRoom ? "🎉 Demande de bail créée !" : "🎉 Réservation créée !",
         description: "Le propriétaire a été notifié. Vous serez contacté pour le paiement.",
         duration: 5000
       });
@@ -525,121 +453,6 @@ function ReservationModal({
     }
   };
 
-  /* PAIEMENT - Création de réservation APRÈS paiement
-  const createBookingAfterPayment = async (transactionId: string) => {
-    if (!user?.id || !validEquipment.id) {
-      toast({
-        title: "Erreur",
-        description: "Informations utilisateur manquantes.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      let documentUrl = null;
-      if (reservationDetails.identityDocument) {
-        try {
-          const fileExt = reservationDetails.identityDocument.name.split('.').pop() || 'jpg';
-          const fileName = `identity_${user.id}_${Date.now()}.${fileExt}`;
-          
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('identity-documents')
-            .upload(fileName, reservationDetails.identityDocument);
-
-          if (!uploadError && uploadData) {
-            const { data: publicUrlData } = supabase.storage
-              .from('identity-documents')
-              .getPublicUrl(uploadData.path);
-            documentUrl = publicUrlData.publicUrl;
-          }
-        } catch (uploadErr) {
-          console.error("❌ Erreur upload:", uploadErr);
-        }
-      }
-
-      const bookingData = {
-        equipment_id: validEquipment.id,
-        renter_id: user.id,
-        start_date: selectedStartDate.toISOString().split('T')[0],
-        end_date: selectedEndDate.toISOString().split('T')[0],
-        total_price: feeCalculations.baseCost,
-        deposit_amount: validEquipment.deposit_amount,
-        status: 'pending',
-        payment_status: 'paid', // Payé via KakiaPay
-        payment_method: 'kakiapay',
-        transaction_id: transactionId,
-        contact_phone: reservationDetails.contactPhone || '',
-        delivery_method: reservationDetails.deliveryMethod || 'pickup',
-        delivery_address: reservationDetails.deliveryAddress || null,
-        special_requests: reservationDetails.specialRequests || null,
-        commission_amount: feeCalculations.commissionAmount,
-        platform_fee: feeCalculations.platformFee,
-        identity_verified: true,
-        identity_document_url: documentUrl
-      };
-
-      const { data: booking, error: bookingError } = await supabase
-        .from('bookings')
-        .insert(bookingData)
-        .select()
-        .single();
-
-      if (bookingError) {
-        throw bookingError;
-      }
-
-      console.log('✅ Réservation créée avec paiement:', booking.id);
-
-      await supabase.from('notifications').insert({
-        user_id: validEquipment.owner_id,
-        type: 'new_booking',
-        title: '🔔 Nouvelle réservation payée',
-        message: `${user.email} a réservé "${validEquipment.title}" pour ${safeToLocaleString(feeCalculations.baseCost)} FCFA. Paiement confirmé.`,
-        booking_id: booking.id
-      });
-
-      try {
-        const { data: emailResult, error: emailError } = await supabase.functions.invoke(
-          'send-booking-notification-gmail',
-          {
-            body: { booking_id: booking.id }
-          }
-        );
-
-        if (emailError) {
-          console.error('⚠️ Erreur envoi email:', emailError);
-        } else if (emailResult?.success) {
-          console.log('✅ Email envoyé au propriétaire');
-        }
-      } catch (emailError: any) {
-        console.error('⚠️ Exception email:', emailError.message);
-      }
-
-      toast({
-        title: "🎉 Réservation créée !",
-        description: "Le propriétaire a été notifié et va examiner votre demande.",
-        duration: 5000
-      });
-
-      onSuccess();
-      onClose();
-
-    } catch (error: any) {
-      console.error('❌ Erreur création réservation:', error);
-      toast({
-        title: "Erreur",
-        description: error.message || "Une erreur est survenue.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-  */ // FIN PAIEMENT
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) {
@@ -651,19 +464,19 @@ function ReservationModal({
       >
         <div className="flex flex-col h-full">
           
-          {/* Header - Fixed - 20% */}
+          {/* Header */}
           <div className="shrink-0">
             <DialogHeader>
               <div className="bg-gradient-to-r from-emerald-600 to-blue-600 p-3 sm:p-4 text-white">
                 <DialogTitle className="text-base sm:text-xl font-bold flex items-center">
-                  <Zap className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-                  Réservation Express
+                  {isRoom ? <Home className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> : <Zap className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />}
+                  {isRoom ? 'Demande de bail' : 'Réservation Express'}
                 </DialogTitle>
                 <p className="text-emerald-100 text-xs sm:text-sm mt-1 truncate">
                   {validEquipment.title}
                 </p>
                 
-                {/* Indicateur de progression - COMPACT */}
+                {/* Indicateur de progression */}
                 <div className="mt-3">
                   <div className="flex items-center justify-between">
                     {[1, 2, 3, 4].map((step) => (
@@ -686,7 +499,7 @@ function ReservationModal({
                     ))}
                   </div>
                   <div className="flex justify-between mt-1 text-[10px] sm:text-xs">
-                    <span className="text-white/90">Dates</span>
+                    <span className="text-white/90">{isRoom ? 'Bail' : 'Dates'}</span>
                     <span className="text-white/90">Contact</span>
                     <span className="text-white/90">ID</span>
                     <span className="text-white/90">OK</span>
@@ -697,155 +510,28 @@ function ReservationModal({
           </div>
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-6 sm:py-4">
-            {/* Étape 1: Sélection des dates */}
-            {/* {currentStep === 1 && (
-              <div className="space-y-3">
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">Sélectionnez vos dates</h3>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-medium mb-2 block">Date de début</Label>
-                      <Popover 
-                        open={isStartDateOpen} 
-                        onOpenChange={setIsStartDateOpen}
-                        modal={true}  // ✅ AJOUT
-                      >
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-start text-left font-normal"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {safeFormatDate(selectedStartDate)}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent 
-                          className="w-auto p-0 z-[9999]"  // ✅ z-index très élevé
-                          align="start"
-                          onInteractOutside={(e) => {
-                            // ✅ Empêcher la fermeture automatique
-                            e.preventDefault();
-                          }}
-                        >
-                          <Calendar
-                            mode="single"
-                            selected={selectedStartDate}
-                            onSelect={(date) => {
-                              if (date) {
-                                setSelectedStartDate(date);
-                                setIsStartDateOpen(false);  // Fermer manuellement
-                              }
-                            }}
-                            disabled={(date) => date < new Date()}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-
-
-                    <div>
-                      <Label className="text-sm font-medium mb-2 block">Date de fin</Label>
-                      <Popover 
-                        open={isEndDateOpen} 
-                        onOpenChange={setIsEndDateOpen}
-                        modal={true}  // ✅ AJOUT
-                      >
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-start text-left font-normal"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {safeFormatDate(selectedEndDate)}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent 
-                          className="w-auto p-0 z-[9999]"  // ✅ z-index très élevé
-                          align="start"
-                          onInteractOutside={(e) => {
-                            // ✅ Empêcher la fermeture automatique
-                            e.preventDefault();
-                          }}
-                        >
-                          <Calendar
-                            mode="single"
-                            selected={selectedEndDate}
-                            onSelect={(date) => {
-                              if (date) {
-                                setSelectedEndDate(date);
-                                setIsEndDateOpen(false);  // Fermer manuellement
-                              }
-                            }}
-                            disabled={(date) => date <= selectedStartDate}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  </div>
-
-                  <Card className="mt-4 sm:mt-6 bg-gradient-to-br from-blue-50 to-emerald-50 border-blue-200">
-                    <CardContent className="p-3 sm:p-4">
-                      <div className="flex items-center mb-2 sm:mb-3">
-                        <Calculator className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mr-2" />
-                        <h4 className="font-semibold text-sm sm:text-base text-blue-900">
-                          Estimation des coûts
-                        </h4>
-                      </div>
-                      
-                      <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-                        <div className="flex justify-between">
-                          <span>Prix journalier</span>
-                          <span className="font-medium">{safeToLocaleString(validEquipment.daily_price)} FCFA</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Nombre de jours</span>
-                          <span className="font-medium">{feeCalculations.numberOfDays}</span>
-                        </div>
-                        <Separator />
-                        <div className="flex justify-between font-semibold text-blue-700">
-                          <span>Sous-total</span>
-                          <span>{safeToLocaleString(feeCalculations.baseCost)} FCFA</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span>Commission plateforme (5%)</span>
-                          <span>{safeToLocaleString(feeCalculations.commissionAmount)} FCFA</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span>Frais de service</span>
-                          <span>{safeToLocaleString(feeCalculations.platformFee)} FCFA</span>
-                        </div>
-                        <Separator />
-                        <div className="flex justify-between text-base font-bold text-emerald-700">
-                          <span>Total</span>
-                          <span>{safeToLocaleString(feeCalculations.totalWithFees)} FCFA</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            )} */}
+            {/* ✅ ÉTAPE 1: Dates adaptées pour chambres et équipements */}
             {currentStep === 1 && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Sélectionner les dates</h3>
+                  <h3 className="text-lg font-semibold mb-4">
+                    {isRoom ? 'Période du bail' : 'Sélectionner les dates'}
+                  </h3>
                   
-                  {/* Message informatif */}
                   <Alert className="mb-6">
                     <Info className="h-4 w-4" />
                     <AlertDescription className="text-sm">
-                      Les dates déjà réservées sont automatiquement bloquées. 
-                      Vous ne pouvez pas sélectionner des dates qui chevauchent une réservation existante.
+                      {isRoom 
+                        ? "Sélectionnez la date de début et la durée de votre bail mensuel."
+                        : "Les dates déjà réservées sont automatiquement bloquées."
+                      }
                     </AlertDescription>
                   </Alert>
 
-                  {/* Champ 1 : Date de début */}
+                  {/* Date de début */}
                   <div className="space-y-2 mb-4">
                     <Label htmlFor="start-date" className="text-sm font-medium">
-                      Date de début <span className="text-red-500">*</span>
+                      {isRoom ? 'Date de début du bail' : 'Date de début'} <span className="text-red-500">*</span>
                     </Label>
                     <SingleDatePickerWithBlockedDates
                       equipmentId={validEquipment.id}
@@ -853,8 +539,7 @@ function ReservationModal({
                       setDate={(date) => {
                         console.log('📅 Date de début sélectionnée:', date);
                         setSelectedStartDate(date);
-                        // Si la date de fin est avant la nouvelle date de début, la réinitialiser
-                        if (date && selectedEndDate && selectedEndDate <= date) {
+                        if (!isRoom && date && selectedEndDate && selectedEndDate <= date) {
                           setSelectedEndDate(undefined);
                           toast({
                             title: "Date de fin réinitialisée",
@@ -862,33 +547,58 @@ function ReservationModal({
                           });
                         }
                       }}
-                      label="Date de début"
-                      placeholder="Sélectionner la date de début"
+                      label={isRoom ? "Date de début du bail" : "Date de début"}
+                      placeholder={isRoom ? "Date d'entrée dans le logement" : "Sélectionner la date de début"}
                     />
                   </div>
 
-                  {/* Champ 2 : Date de fin */}
-                  <div className="space-y-2 mb-4">
-                    <Label htmlFor="end-date" className="text-sm font-medium">
-                      Date de fin <span className="text-red-500">*</span>
-                    </Label>
-                    <SingleDatePickerWithBlockedDates
-                      equipmentId={validEquipment.id}
-                      date={selectedEndDate}
-                      setDate={(date) => {
-                        console.log('📅 Date de fin sélectionnée:', date);
-                        setSelectedEndDate(date);
-                      }}
-                      label="Date de fin"
-                      placeholder="Sélectionner la date de fin"
-                      minDate={selectedStartDate} // ✅ La date de fin doit être après la date de début
-                    />
-                    {selectedStartDate && !selectedEndDate && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Sélectionnez une date après le {safeFormatDate(selectedStartDate)}
-                      </p>
-                    )}
-                  </div>
+                  {/* ✅ POUR LES CHAMBRES: Durée du bail */}
+                  {isRoom && (
+                    <div className="space-y-2 mb-4">
+                      <Label htmlFor="bail-duration" className="text-sm font-medium">
+                        Durée du bail <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        value={bailDuration.toString()}
+                        onValueChange={(value) => setBailDuration(parseInt(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner la durée" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 mois</SelectItem>
+                          <SelectItem value="3">3 mois</SelectItem>
+                          <SelectItem value="6">6 mois</SelectItem>
+                          <SelectItem value="12">12 mois</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* ✅ POUR LES ÉQUIPEMENTS: Date de fin */}
+                  {!isRoom && (
+                    <div className="space-y-2 mb-4">
+                      <Label htmlFor="end-date" className="text-sm font-medium">
+                        Date de fin <span className="text-red-500">*</span>
+                      </Label>
+                      <SingleDatePickerWithBlockedDates
+                        equipmentId={validEquipment.id}
+                        date={selectedEndDate}
+                        setDate={(date) => {
+                          console.log('📅 Date de fin sélectionnée:', date);
+                          setSelectedEndDate(date);
+                        }}
+                        label="Date de fin"
+                        placeholder="Sélectionner la date de fin"
+                        minDate={selectedStartDate}
+                      />
+                      {selectedStartDate && !selectedEndDate && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Sélectionnez une date après le {safeFormatDate(selectedStartDate)}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Affichage de la période sélectionnée */}
                   {selectedStartDate && selectedEndDate && (
@@ -896,7 +606,9 @@ function ReservationModal({
                       <CardContent className="p-4">
                         <div className="flex items-center mb-3">
                           <CalendarIcon className="h-5 w-5 text-green-600 mr-2" />
-                          <span className="font-semibold text-green-800">Période sélectionnée</span>
+                          <span className="font-semibold text-green-800">
+                            {isRoom ? 'Période du bail' : 'Période sélectionnée'}
+                          </span>
                         </div>
                         <div className="space-y-2 text-sm text-green-700">
                           <div className="flex justify-between items-center">
@@ -911,7 +623,10 @@ function ReservationModal({
                           <div className="flex justify-between items-center">
                             <span className="font-semibold">Durée totale :</span>
                             <span className="font-bold text-base">
-                              {feeCalculations.numberOfDays} jour{feeCalculations.numberOfDays > 1 ? 's' : ''}
+                              {isRoom 
+                                ? `${feeCalculations.numberOfMonths} mois`
+                                : `${feeCalculations.numberOfDays} jour${feeCalculations.numberOfDays > 1 ? 's' : ''}`
+                              }
                             </span>
                           </div>
                           <div className="flex justify-between items-center pt-2 border-t border-green-200">
@@ -923,16 +638,6 @@ function ReservationModal({
                         </div>
                       </CardContent>
                     </Card>
-                  )}
-
-                  {/* Message d'aide */}
-                  {!selectedStartDate && (
-                    <Alert variant="default" className="mt-4">
-                      <CalendarIcon className="h-4 w-4" />
-                      <AlertDescription className="text-sm">
-                        Commencez par sélectionner une date de début
-                      </AlertDescription>
-                    </Alert>
                   )}
                 </div>
               </div>
@@ -958,7 +663,9 @@ function ReservationModal({
                     </div>
 
                     <div>
-                      <Label htmlFor="delivery">Méthode de récupération *</Label>
+                      <Label htmlFor="delivery">
+                        {isRoom ? 'Mode de visite' : 'Méthode de récupération'} *
+                      </Label>
                       <Select
                         value={reservationDetails.deliveryMethod}
                         onValueChange={(value) => handleInputChange('deliveryMethod', value)}
@@ -967,13 +674,17 @@ function ReservationModal({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="pickup">Récupération sur place</SelectItem>
-                          <SelectItem value="delivery">Livraison</SelectItem>
+                          <SelectItem value="pickup">
+                            {isRoom ? 'Visite sur place' : 'Récupération sur place'}
+                          </SelectItem>
+                          <SelectItem value="delivery">
+                            {isRoom ? 'Visite virtuelle' : 'Livraison'}
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
-                    {reservationDetails.deliveryMethod === 'delivery' && (
+                    {reservationDetails.deliveryMethod === 'delivery' && !isRoom && (
                       <div>
                         <Label htmlFor="address">Adresse de livraison *</Label>
                         <Input
@@ -987,11 +698,16 @@ function ReservationModal({
                     )}
 
                     <div>
-                      <Label htmlFor="requests">Demandes spéciales (optionnel)</Label>
+                      <Label htmlFor="requests">
+                        {isRoom ? 'Message pour le propriétaire (optionnel)' : 'Demandes spéciales (optionnel)'}
+                      </Label>
                       <textarea
                         id="requests"
                         className="w-full mt-1 p-2 border rounded-md min-h-[100px]"
-                        placeholder="Avez-vous des demandes particulières ?"
+                        placeholder={isRoom 
+                          ? "Présentez-vous et expliquez votre projet..." 
+                          : "Avez-vous des demandes particulières ?"
+                        }
                         value={reservationDetails.specialRequests}
                         onChange={(e) => handleInputChange('specialRequests', e.target.value)}
                       />
@@ -1064,21 +780,25 @@ function ReservationModal({
               </div>
             )}
 
-            {/* Étape 4: Confirmation (SANS PAIEMENT) */}
+            {/* Étape 4: Confirmation */}
             {currentStep === 4 && (
               <div className="space-y-3">
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Confirmer la réservation</h3>
+                  <h3 className="text-lg font-semibold mb-4">
+                    {isRoom ? 'Confirmer la demande' : 'Confirmer la réservation'}
+                  </h3>
                   
-                  {/* Info sans paiement */}
                   <Card className="bg-amber-50 border-amber-200 mb-4">
                     <CardContent className="p-3 sm:p-4">
                       <div className="flex items-center mb-2">
                         <Info className="h-5 w-5 text-amber-600 mr-2" />
-                        <span className="text-sm font-medium text-amber-800">Paiement à la livraison</span>
+                        <span className="text-sm font-medium text-amber-800">Paiement à la signature</span>
                       </div>
                       <p className="text-xs text-amber-700">
-                        Le paiement sera effectué directement auprès du propriétaire lors de la récupération de l'équipement.
+                        {isRoom 
+                          ? "Le paiement du premier loyer et de la caution sera effectué lors de la signature du bail."
+                          : "Le paiement sera effectué directement auprès du propriétaire lors de la récupération de l'équipement."
+                        }
                       </p>
                     </CardContent>
                   </Card>
@@ -1089,13 +809,16 @@ function ReservationModal({
                       <h4 className="font-semibold mb-3">Récapitulatif</h4>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Équipement</span>
+                          <span className="text-gray-600">{ItemLabel}</span>
                           <span className="font-medium">{validEquipment.title}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Période</span>
                           <span className="font-medium">
-                            {feeCalculations.numberOfDays} jour{feeCalculations.numberOfDays > 1 ? 's' : ''}
+                            {isRoom 
+                              ? `${feeCalculations.numberOfMonths} mois`
+                              : `${feeCalculations.numberOfDays} jour${feeCalculations.numberOfDays > 1 ? 's' : ''}`
+                            }
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -1112,76 +835,46 @@ function ReservationModal({
                           <span>{safeToLocaleString(feeCalculations.totalWithFees)} FCFA</span>
                         </div>
                         <p className="text-xs text-amber-600 mt-2">
-                          💡 À régler au propriétaire lors de la remise du matériel
+                          💡 {isRoom ? 'À régler lors de la signature du bail' : 'À régler au propriétaire lors de la remise du matériel'}
                         </p>
                       </div>
-                      </CardContent>
-                    </Card>
+                    </CardContent>
+                  </Card>
 
-                    {/* Conditions générales */}
-                    <div className="flex items-start space-x-2 mb-4">
-                      <Checkbox 
-                        id="terms" 
-                        checked={reservationDetails.acceptTerms}
-                        onCheckedChange={(checked) => handleInputChange('acceptTerms', checked)}
-                        className="mt-0.5"
-                      />
-                      <Label htmlFor="terms" className="text-sm leading-relaxed">
-                        J'accepte les <span className="text-blue-600 underline cursor-pointer">conditions générales</span> et je m'engage à payer le montant convenu lors de la récupération
-                      </Label>
-                    </div>
-
-                    {/* Bouton de confirmation */}
-                    <Button
-                      onClick={nextStep}
-                      disabled={!reservationDetails.acceptTerms || isSubmitting}
-                      className="w-full"
-                      size="lg"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Clock className="mr-2 h-5 w-5 animate-spin" />
-                          Création en cours...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="mr-2 h-5 w-5" />
-                          Confirmer la réservation
-                        </>
-                      )}
-                    </Button>
+                  {/* Conditions générales */}
+                  <div className="flex items-start space-x-2 mb-4">
+                    <Checkbox 
+                      id="terms" 
+                      checked={reservationDetails.acceptTerms}
+                      onCheckedChange={(checked) => handleInputChange('acceptTerms', checked)}
+                      className="mt-0.5"
+                    />
+                    <Label htmlFor="terms" className="text-sm leading-relaxed">
+                      J'accepte les <span className="text-blue-600 underline cursor-pointer">conditions générales</span> et je m'engage à payer le montant convenu {isRoom ? 'lors de la signature du bail' : 'lors de la récupération'}
+                    </Label>
                   </div>
 
-                  {/* PAIEMENT - Widget KakiaPay commenté */}
-                  {/* 
-                  {reservationDetails.acceptTerms && !paymentCompleted && (
-                    <div>
-                      <Button
-                        onClick={() => {
-                          onClose();
-                          setTimeout(() => {
-                            handleOpenKakiaPay();
-                          }, 300);
-                        }}
-                        className="w-full"
-                        size="lg"
-                      >
-                        <CreditCard className="mr-2 h-5 w-5" />
-                        Payer {safeToLocaleString(feeCalculations.totalWithFees)} FCFA
-                      </Button>
-                    </div>
-                  )}
-
-                  {paymentCompleted && (
-                    <Alert className="border-green-200 bg-green-50">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <AlertDescription className="text-green-700 text-sm">
-                        Paiement validé ! Création de votre réservation...
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  */}
+                  {/* Bouton de confirmation */}
+                  <Button
+                    onClick={nextStep}
+                    disabled={!reservationDetails.acceptTerms || isSubmitting}
+                    className="w-full"
+                    size="lg"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Clock className="mr-2 h-5 w-5 animate-spin" />
+                        Création en cours...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="mr-2 h-5 w-5" />
+                        {isRoom ? 'Confirmer la demande de bail' : 'Confirmer la réservation'}
+                      </>
+                    )}
+                  </Button>
                 </div>
+              </div>
             )}
           </div>
 
@@ -1221,5 +914,4 @@ function ReservationModal({
   );
 }
 
-// Export par défaut pour compatibilité avec les imports existants
 export default ReservationModal;

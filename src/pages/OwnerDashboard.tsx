@@ -1,4 +1,4 @@
-// src/pages/OwnerDashboard.tsx - VERSION RESPONSIVE MOBILE
+// src/pages/OwnerDashboard.tsx - VERSION AVEC GESTION STATUT CHAMBRES
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/auth';
@@ -37,6 +37,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { startOfDay } from 'date-fns';
+import { isRoomCategory } from '@/types/supabase';
 
 interface BookingWithDetails {
   id: string;
@@ -53,6 +54,7 @@ interface BookingWithDetails {
     id: string;
     title: string;
     owner_id: string;
+    category?: string;
   };
   renter?: {
     id: string;
@@ -99,7 +101,6 @@ export function OwnerDashboard() {
     try {
       console.log('🔄 Chargement des réservations pour:', user.id);
 
-      // Récupérer les équipements du propriétaire
       const { data: userEquipments, error: equipError } = await supabase
         .from('equipments')
         .select('id')
@@ -110,7 +111,7 @@ export function OwnerDashboard() {
       const equipmentIds = userEquipments?.map(e => e.id) || [];
       
       if (equipmentIds.length === 0) {
-        console.log('⚠️ Aucun équipement trouvé pour cet utilisateur');
+        console.log('⚠️ Aucun équipement trouvé');
         setBookings({ 
           pending: [], 
           confirmed: [], 
@@ -130,9 +131,6 @@ export function OwnerDashboard() {
         return;
       }
 
-      console.log('🔍 IDs des équipements:', equipmentIds);
-
-      // Récupérer les réservations
       const { data, error } = await supabase
         .from('bookings')
         .select(`
@@ -140,7 +138,8 @@ export function OwnerDashboard() {
           equipment:equipments!inner(
             id,
             title,
-            owner_id
+            owner_id,
+            category
           ),
           renter:profiles!bookings_renter_id_fkey(
             id,
@@ -153,12 +152,7 @@ export function OwnerDashboard() {
         .in('equipment_id', equipmentIds)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('❌ Erreur lors du chargement:', error);
-        throw error;
-      }
-
-      console.log('✅ Réservations chargées:', data?.length || 0);
+      if (error) throw error;
 
       const allBookings = data || [];
       
@@ -171,7 +165,6 @@ export function OwnerDashboard() {
         all: allBookings
       });
 
-      // Calculer les statistiques
       const newStats = {
         totalRevenue: allBookings
           .filter(b => b.status === 'completed')
@@ -183,7 +176,6 @@ export function OwnerDashboard() {
         rejectedCount: allBookings.filter(b => b.status === 'rejected').length
       };
 
-      console.log('📈 Statistiques:', newStats);
       setStats(newStats);
 
     } catch (error) {
@@ -238,17 +230,6 @@ export function OwnerDashboard() {
 
       if (updateError) throw updateError;
 
-      await supabase
-        .from('notifications')
-        .insert({
-          user_id: selectedBooking.renter_id,
-          type: 'rental_started',
-          title: 'Location démarrée',
-          message: `Votre location de "${selectedBooking.equipment?.title}" a démarré.`,
-          booking_id: selectedBooking.id,
-          read: false
-        });
-
       try {
         await supabase.functions.invoke('send-rental-started-email', {
           body: { booking_id: selectedBooking.id }
@@ -285,6 +266,12 @@ export function OwnerDashboard() {
     try {
       console.log('🏁 Fin de la location:', selectedBooking.id);
 
+      // ✅ Détecter si c'est une chambre
+      const isRoom = selectedBooking.equipment?.category 
+        ? isRoomCategory(selectedBooking.equipment.category) 
+        : false;
+
+      // 1. Mettre à jour la réservation
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
@@ -295,6 +282,24 @@ export function OwnerDashboard() {
 
       if (updateError) throw updateError;
 
+      // ✅ 2. Si c'est une chambre, la rendre disponible
+      if (isRoom) {
+        console.log('🏠 Chambre détectée - Remise en disponible');
+        
+        const { error: equipmentError } = await supabase
+          .from('equipments')
+          .update({ status: 'disponible' })
+          .eq('id', selectedBooking.equipment_id);
+
+        if (equipmentError) {
+          console.error('❌ Erreur mise à jour statut chambre:', equipmentError);
+          throw equipmentError;
+        }
+
+        console.log('✅ Chambre remise en disponible');
+      }
+
+      // 3. Créer la notification
       await supabase
         .from('notifications')
         .insert({
@@ -306,6 +311,7 @@ export function OwnerDashboard() {
           read: false
         });
 
+      // 4. Envoyer l'email
       try {
         await supabase.functions.invoke('send-rental-completed-email', {
           body: { booking_id: selectedBooking.id }
@@ -316,7 +322,9 @@ export function OwnerDashboard() {
 
       toast({
         title: "✅ Location terminée",
-        description: "Le locataire a été notifié et peut laisser un avis.",
+        description: isRoom 
+          ? "Le logement est de nouveau disponible à la location."
+          : "Le locataire a été notifié et peut laisser un avis.",
         duration: 5000
       });
 
@@ -551,46 +559,31 @@ export function OwnerDashboard() {
         </Card>
       </div>
 
-      {/* ✅ ONGLETS RESPONSIVE AVEC SCROLL HORIZONTAL SUR MOBILE */}
+      {/* Onglets */}
       <Tabs defaultValue="pending" className="w-full">
         <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
           <TabsList className="inline-flex w-auto min-w-full md:grid md:w-full md:grid-cols-5 gap-1">
-            <TabsTrigger 
-              value="pending" 
-              className="whitespace-nowrap flex-shrink-0 px-3 md:px-4"
-            >
+            <TabsTrigger value="pending" className="whitespace-nowrap flex-shrink-0 px-3 md:px-4">
               <Clock className="h-4 w-4 mr-1 md:mr-2" />
               <span className="text-xs md:text-sm">Attente</span>
               <span className="ml-1">({stats.pendingCount})</span>
             </TabsTrigger>
-            <TabsTrigger 
-              value="confirmed" 
-              className="whitespace-nowrap flex-shrink-0 px-3 md:px-4"
-            >
+            <TabsTrigger value="confirmed" className="whitespace-nowrap flex-shrink-0 px-3 md:px-4">
               <CheckCircle className="h-4 w-4 mr-1 md:mr-2" />
               <span className="text-xs md:text-sm">Confirmées</span>
               <span className="ml-1">({stats.confirmedCount})</span>
             </TabsTrigger>
-            <TabsTrigger 
-              value="ongoing" 
-              className="whitespace-nowrap flex-shrink-0 px-3 md:px-4"
-            >
+            <TabsTrigger value="ongoing" className="whitespace-nowrap flex-shrink-0 px-3 md:px-4">
               <PlayCircle className="h-4 w-4 mr-1 md:mr-2" />
               <span className="text-xs md:text-sm">En cours</span>
               <span className="ml-1">({stats.ongoingCount})</span>
             </TabsTrigger>
-            <TabsTrigger 
-              value="completed" 
-              className="whitespace-nowrap flex-shrink-0 px-3 md:px-4"
-            >
+            <TabsTrigger value="completed" className="whitespace-nowrap flex-shrink-0 px-3 md:px-4">
               <CheckCircle2 className="h-4 w-4 mr-1 md:mr-2" />
               <span className="text-xs md:text-sm">Terminées</span>
               <span className="ml-1">({stats.completedCount})</span>
             </TabsTrigger>
-            <TabsTrigger 
-              value="rejected" 
-              className="whitespace-nowrap flex-shrink-0 px-3 md:px-4"
-            >
+            <TabsTrigger value="rejected" className="whitespace-nowrap flex-shrink-0 px-3 md:px-4">
               <XCircle className="h-4 w-4 mr-1 md:mr-2" />
               <span className="text-xs md:text-sm">Refusées</span>
               <span className="ml-1">({stats.rejectedCount})</span>
@@ -598,7 +591,6 @@ export function OwnerDashboard() {
           </TabsList>
         </div>
 
-        {/* Onglet En attente */}
         <TabsContent value="pending" className="space-y-4 mt-4">
           {bookings.pending.length === 0 ? (
             <Card>
@@ -618,7 +610,6 @@ export function OwnerDashboard() {
           )}
         </TabsContent>
 
-        {/* Onglet Confirmées */}
         <TabsContent value="confirmed" className="space-y-4 mt-4">
           {bookings.confirmed.length === 0 ? (
             <Card>
@@ -634,7 +625,6 @@ export function OwnerDashboard() {
           )}
         </TabsContent>
 
-        {/* Onglet En cours */}
         <TabsContent value="ongoing" className="space-y-4 mt-4">
           {bookings.ongoing.length === 0 ? (
             <Card>
@@ -650,7 +640,6 @@ export function OwnerDashboard() {
           )}
         </TabsContent>
 
-        {/* Onglet Terminées */}
         <TabsContent value="completed" className="space-y-4 mt-4">
           {bookings.completed.length === 0 ? (
             <Card>
@@ -666,7 +655,6 @@ export function OwnerDashboard() {
           )}
         </TabsContent>
 
-        {/* Onglet Refusées */}
         <TabsContent value="rejected" className="space-y-4 mt-4">
           {bookings.rejected.length === 0 ? (
             <Card>
@@ -683,11 +671,8 @@ export function OwnerDashboard() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog de confirmation pour démarrer */}
-      <AlertDialog 
-        open={actionType === 'start'} 
-        onOpenChange={(open) => !open && setActionType(null)}
-      >
+      {/* Dialogs */}
+      <AlertDialog open={actionType === 'start'} onOpenChange={(open) => !open && setActionType(null)}>
         <AlertDialogContent className="max-w-md mx-4">
           <AlertDialogHeader>
             <AlertDialogTitle>Démarrer la location</AlertDialogTitle>
@@ -699,38 +684,32 @@ export function OwnerDashboard() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleStartRental}
-              disabled={isProcessing}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
+            <AlertDialogAction onClick={handleStartRental} disabled={isProcessing} className="bg-blue-600 hover:bg-blue-700">
               {isProcessing ? 'Traitement...' : 'Confirmer'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Dialog de confirmation pour terminer */}
-      <AlertDialog 
-        open={actionType === 'complete'} 
-        onOpenChange={(open) => !open && setActionType(null)}
-      >
+      <AlertDialog open={actionType === 'complete'} onOpenChange={(open) => !open && setActionType(null)}>
         <AlertDialogContent className="max-w-md mx-4">
           <AlertDialogHeader>
             <AlertDialogTitle>Terminer la location</AlertDialogTitle>
             <AlertDialogDescription>
               Confirmez-vous que le matériel a été restitué et que la location est terminée ?
               <br /><br />
+              {selectedBooking?.equipment?.category && isRoomCategory(selectedBooking.equipment.category) && (
+                <span className="font-medium text-blue-600">
+                  ℹ️ Le logement sera automatiquement remis en disponible.
+                  <br /><br />
+                </span>
+              )}
               Le locataire recevra une notification pour laisser une évaluation.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleCompleteRental}
-              disabled={isProcessing}
-              className="bg-green-600 hover:bg-green-700"
-            >
+            <AlertDialogAction onClick={handleCompleteRental} disabled={isProcessing} className="bg-green-600 hover:bg-green-700">
               {isProcessing ? 'Traitement...' : 'Confirmer'}
             </AlertDialogAction>
           </AlertDialogFooter>

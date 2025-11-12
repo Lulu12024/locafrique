@@ -66,22 +66,22 @@ serve(async (req) => {
     });
 
     // 🔔 CRÉER LA NOTIFICATION
-    const { error: notifError } = await supabaseService
-      .from('notifications')
-      .insert({
-        user_id: booking.renter.id,
-        type: 'rental_started',
-        title: 'Location demarree',
-        message: `Votre location de "${booking.equipment.title}" a demarre.`,
-        booking_id: booking_id,
-        read: false
-      });
+    // const { error: notifError } = await supabaseService
+    //   .from('notifications')
+    //   .insert({
+    //     user_id: booking.renter.id,
+    //     type: 'rental_started',
+    //     title: 'Location demarree',
+    //     message: `Votre location de "${booking.equipment.title}" a demarre.`,
+    //     booking_id: booking_id,
+    //     read: false
+    //   });
 
-    if (notifError) {
-      console.error('⚠️ Erreur création notification:', notifError);
-    } else {
-      console.log('✅ Notification créée avec succès');
-    }
+    // if (notifError) {
+    //   console.error('⚠️ Erreur création notification:', notifError);
+    // } else {
+    //   console.log('✅ Notification créée avec succès');
+    // }
 
     // Formater les dates
     const formatDate = (dateString: string) => {
