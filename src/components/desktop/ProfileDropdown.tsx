@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+// import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { OptimizedAvatar } from './OptimizedAvatar';
 import { 
   LayoutDashboard, 
   Package, 
@@ -136,12 +137,11 @@ function ProfileDropdown() {
           className="flex items-center space-x-2 hover:bg-gray-100 transition-colors rounded-lg px-3 py-2" 
           onClick={toggleDropdown}
         >
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={profile?.avatar_url} />
-            <AvatarFallback className="bg-green-600 text-white text-sm">
-              {getInitials()}
-            </AvatarFallback>
-          </Avatar>
+          <OptimizedAvatar 
+            src={profile?.avatar_url || profile?.avatar_url}
+            fallback={getInitials()}
+            className="h-8 w-8"
+          />
           <span className="text-gray-700 font-medium hidden lg:inline">{t('nav.profile')}</span>
         </Button>
 
@@ -151,12 +151,11 @@ function ProfileDropdown() {
             {/* User Info Header */}
             <div className="px-4 py-3 border-b border-gray-100">
               <div className="flex items-center space-x-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={profile?.avatar_url} />
-                  <AvatarFallback className="bg-green-600 text-white">
-                    {getInitials()}
-                  </AvatarFallback>
-                </Avatar>
+                <OptimizedAvatar 
+                  src={profile?.avatar_url || profile?.avatar_url}
+                  fallback={getInitials()}
+                  className="h-10 w-10"
+                />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">
                     {profile?.first_name} {profile?.last_name}

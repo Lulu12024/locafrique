@@ -1,4 +1,4 @@
-// src/hooks/useEquipments.ts - Version finale sans types Supabase auto-générés
+// src/hooks/useEquipments.ts - VERSION CORRIGÉE - Erreurs TypeScript résolues
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from "@/components/ui/use-toast";
@@ -19,17 +19,21 @@ interface AddEquipmentData {
   location?: string;
   city?: string;
   country?: string;
+  price_type?: string;
+  has_technical_support?: boolean;
+  has_training?: boolean;
+  has_insurance?: boolean;
+  has_delivery?: boolean;
+  has_recent_maintenance?: boolean;
 }
 
 export function useEquipments() {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fonction de validation des données d'entrée
   const validateEquipmentData = (data: AddEquipmentData): { valid: boolean; errors: string[] } => {
     const errors: string[] = [];
 
-    // Validation des champs obligatoires
     if (!data.title?.trim()) {
       errors.push("Le titre est obligatoire");
     } else if (data.title.trim().length < 3) {
@@ -47,20 +51,14 @@ export function useEquipments() {
     }
 
     if (!data.daily_price || data.daily_price <= 0) {
-      errors.push("Le prix journalier doit être supérieur à 0");
-    } else if (data.daily_price > 1000000) {
-      errors.push("Le prix journalier ne peut pas dépasser 1 000 000 FCFA");
+      errors.push("Le prix doit être supérieur à 0");
+    } else if (data.daily_price > 10000000) {
+      errors.push("Le prix ne peut pas dépasser 10 000 000 FCFA");
     }
 
     if (data.deposit_amount !== undefined && data.deposit_amount < 0) {
       errors.push("Le montant de la caution ne peut pas être négatif");
     }
-
-    // if (!data.category) {
-    //   errors.push("La catégorie est obligatoire");
-    // } else if (!validateCategory(data.category)) {
-    //   errors.push("La catégorie sélectionnée n'est pas valide");
-    // }
     
     if (!data.category) {
       errors.push("La catégorie est obligatoire");
@@ -72,10 +70,13 @@ export function useEquipments() {
       errors.push("L'année doit être comprise entre 1900 et l'année prochaine");
     }
 
+    if (data.price_type && !['daily', 'monthly'].includes(data.price_type)) {
+      errors.push("Le type de prix doit être 'daily' ou 'monthly'");
+    }
+
     return { valid: errors.length === 0, errors };
   };
 
-  // Fonction pour formater les données d'équipement
   const formatEquipmentData = (data: AddEquipmentData, userId: string) => {
     return {
       title: data.title.trim(),
@@ -90,38 +91,23 @@ export function useEquipments() {
       location: data.location?.trim() || '',
       city: data.city?.trim() || 'Cotonou',
       country: data.country?.trim() || 'Bénin',
-      status: 'en_attente', // ✅ CHANGEMENT ICI : statut en attente au lieu de disponible
-      moderation_status: 'pending', // ✅ NOUVEAU : statut de modération en attente
+      status: 'en_attente',
+      moderation_status: 'pending',
       owner_id: userId,
-      is_premium: false, // Par défaut, les équipements ne sont pas premium
-      published_at: null, // Sera défini après approbation
-      approved_at: null, // Sera défini après approbation
+      is_premium: false,
+      published_at: null,
+      approved_at: null,
       rejected_at: null,
-      rejection_reason: null
+      rejection_reason: null,
+      price_type: data.price_type || 'daily',
+      has_technical_support: data.has_technical_support || false,
+      has_training: data.has_training || false,
+      has_insurance: data.has_insurance || false,
+      has_delivery: data.has_delivery || false,
+      has_recent_maintenance: data.has_recent_maintenance || false,
     };
   };
 
-  // Fonction pour normaliser les données avant insertion
-  const normalizeEquipmentData = (data: AddEquipmentData, userId: string) => {
-    return {
-      title: data.title.trim(),
-      description: data.description.trim(),
-      daily_price: Number(data.daily_price),
-      deposit_amount: data.deposit_amount ? Number(data.deposit_amount) : 0,
-      category: data.category,
-      subcategory: data.subcategory?.trim() || null,
-      condition: data.condition || 'bon',
-      brand: data.brand?.trim() || null,
-      year: data.year ? Number(data.year) : null,
-      location: data.location?.trim() || '',
-      city: data.city?.trim() || 'Cotonou',
-      country: data.country?.trim() || 'Bénin',
-      status: 'disponible',
-      owner_id: userId
-    };
-  };
-
-  // Fonction d'analyse des erreurs d'insertion
   const analyzeInsertError = (error: any): { message: string; solution: string } => {
     switch (error.code) {
       case '23505':
@@ -162,9 +148,7 @@ export function useEquipments() {
     }
   };
 
-  // Fonction principale d'ajout d'équipment - VERSION SANS TYPES SUPABASE
   const addEquipment = useCallback(async (equipmentData: AddEquipmentData): Promise<EquipmentData> => {
-    // Vérification préliminaire de l'utilisateur
     if (!user?.id) {
       console.error("❌ Utilisateur non connecté");
       toast({
@@ -180,7 +164,6 @@ export function useEquipments() {
     try {
       console.log("📝 Début de l'ajout d'équipement:", equipmentData);
 
-      // Étape 1: Validation des données
       const validation = validateEquipmentData(equipmentData);
       if (!validation.valid) {
         const errorMessage = validation.errors.join(", ");
@@ -195,7 +178,6 @@ export function useEquipments() {
         throw new Error(errorMessage);
       }
 
-      // Étape 2: Vérification de la session utilisateur
       const { data: sessionData, error: sessionError } = await supabase.auth.getUser();
       if (sessionError || !sessionData.user) {
         console.error("❌ Session invalide:", sessionError);
@@ -207,23 +189,15 @@ export function useEquipments() {
         throw new Error("Session invalide");
       }
 
-      // Étape 3: Normalisation des données
-      // Étape 3: Formatage des données avec le nouveau statut
       const formattedData = formatEquipmentData(equipmentData, sessionData.user.id);
       console.log("📋 Données formatées:", formattedData);
 
-      // Étape 4: Skip la vérification de profil pour éviter les erreurs TypeScript
-      // La vérification de profil est optionnelle et peut être faite côté UI si nécessaire
-      console.log("ℹ️ Vérification de profil sautée pour éviter les erreurs de types");
-
-      // Étape 5: Insertion dans la base de données - VERSION SANS TYPES
       const { data, error } = await supabase
         .from('equipments')
         .insert(formattedData)
         .select()
         .single();
 
-      // Vérification manuelle de la réponse
       if (error) {
         console.error("❌ Erreur d'insertion:", error);
         const { message, solution } = analyzeInsertError(error);
@@ -238,7 +212,9 @@ export function useEquipments() {
       }
 
       console.log("✅ Équipement créé avec succès:", data);
-      const insertedData = data;
+      
+      // ✅ FIX: Typer explicitement comme 'any' pour éviter les erreurs TypeScript
+      const insertedData = data as any;
 
       if (!insertedData) {
         console.error("❌ Aucune donnée retournée après insertion");
@@ -250,19 +226,18 @@ export function useEquipments() {
         throw new Error("Aucune donnée retournée");
       }
 
-      console.log("✅ Équipement créé avec succès:", insertedData);
-
       // Toast de succès
       const categoryName = EQUIPMENT_CATEGORIES[insertedData.category]?.name || insertedData.category;
       const priceFormatted = insertedData.daily_price.toLocaleString();
+      const priceLabel = insertedData.price_type === 'monthly' ? 'mois' : 'jour';
       
       toast({
         title: "🎉 Équipement ajouté avec succès !",
-        description: `"${insertedData.title}" - Catégorie: ${categoryName} - Prix: ${priceFormatted} FCFA/jour. Vous recevrez une notification dès que votre équipement sera approuvé.`,
+        description: `"${insertedData.title}" - Catégorie: ${categoryName} - Prix: ${priceFormatted} FCFA/${priceLabel}. Vous recevrez une notification dès que votre équipement sera approuvé.`,
         duration: 5000,
       });
       
-      // Créer un objet EquipmentData compatible - CONSTRUCTION MANUELLE
+      // ✅ FIX: Utiliser l'opérateur de coalescence pour les nouveaux champs
       const finalEquipment: EquipmentData = {
         id: insertedData.id,
         title: insertedData.title,
@@ -281,11 +256,24 @@ export function useEquipments() {
         condition: insertedData.condition || 'bon',
         brand: insertedData.brand || undefined,
         year: insertedData.year || undefined,
-        images: [], // Tableau vide à la création
-        booking_count: 0
+        images: [],
+        booking_count: 0,
+        moderation_status: insertedData.moderation_status || null,
+        rejected_at: insertedData.rejected_at || null,
+        rejection_reason: insertedData.rejection_reason || null,
+        approved_at: insertedData.approved_at || null,
+        is_premium: insertedData.is_premium || false,
+        published_at: insertedData.published_at || null,
+        // ✅ FIX: Accès sécurisé aux nouveaux champs
+        price_type: insertedData.price_type || 'daily',
+        has_technical_support: insertedData.has_technical_support ?? false,
+        has_training: insertedData.has_training ?? false,
+        has_insurance: insertedData.has_insurance ?? false,
+        has_delivery: insertedData.has_delivery ?? false,
+        has_recent_maintenance: insertedData.has_recent_maintenance ?? false,
       };
 
-      await notifyAdminNewEquipment(data.id, equipmentData.title, user.id);
+      await notifyAdminNewEquipment(insertedData.id, equipmentData.title, user.id);
 
       return finalEquipment;
 
@@ -303,7 +291,6 @@ export function useEquipments() {
         }
       }
 
-      // Ne pas afficher de toast d'erreur si déjà traité
       if (!error || !(error instanceof Error) || 
           (!error.message.includes('Validation') && 
            !error.message.includes('Session') && 
@@ -325,7 +312,6 @@ export function useEquipments() {
 
   const notifyAdminNewEquipment = async (equipmentId: string, title: string, userId: string) => {
     try {
-      // Créer une notification pour l'admin
       const { error: notificationError } = await supabase
         .from('admin_notifications')
         .insert({
@@ -344,19 +330,11 @@ export function useEquipments() {
         console.log("✅ Notification admin créée avec succès");
       }
 
-      // Envoyer un email à l'admin (optionnel)
-      // await sendEmailToAdmin({
-      //   subject: 'Nouvel équipement à valider - 3W-LOC',
-      //   equipmentTitle: title,
-      //   equipmentId: equipmentId
-      // });
-
     } catch (error) {
       console.warn("⚠️ Erreur lors de la notification admin:", error);
     }
   };
 
-  // Fonction pour récupérer les équipements de l'utilisateur - VERSION SIMPLIFIÉE
   const fetchUserEquipments = useCallback(async (): Promise<EquipmentData[]> => {
     if (!user?.id) {
       console.log("❌ Aucun utilisateur connecté pour récupérer les équipements");
@@ -368,7 +346,6 @@ export function useEquipments() {
     try {
       console.log("🔍 Récupération des équipements pour l'utilisateur:", user.id);
       
-      // Requête simple sans jointures complexes
       const { data, error } = await supabase
         .from('equipments')
         .select(`
@@ -394,7 +371,13 @@ export function useEquipments() {
           rejection_reason,
           created_at,
           updated_at,
-          owner_id
+          owner_id,
+          price_type,
+          has_technical_support,
+          has_training,
+          has_insurance,
+          has_delivery,
+          has_recent_maintenance
         `)
         .eq('owner_id', user.id)
         .order('created_at', { ascending: false });
@@ -404,9 +387,7 @@ export function useEquipments() {
       }
       
       console.log("✅ Équipements récupérés:", data?.length || 0);
-      console.log("📊 Premier équipement:", data?.[0]); // Debug
       
-      // ✅ CORRECTION : Construction manuelle avec TOUS les champs
       const equipments: EquipmentData[] = (data || []).map((item: any) => ({
         id: item.id,
         title: item.title,
@@ -425,16 +406,21 @@ export function useEquipments() {
         condition: item.condition || 'bon',
         brand: item.brand || undefined,
         year: item.year || undefined,
-        images: [], // À charger séparément si nécessaire
+        images: [],
         booking_count: 0,
-        
-        // ✅ AJOUT : Champs de modération manquants
         moderation_status: item.moderation_status || null,
         rejected_at: item.rejected_at || null,
         rejection_reason: item.rejection_reason || null,
         approved_at: item.approved_at || null,
         is_premium: item.is_premium || false,
         published_at: item.published_at || null,
+        // ✅ FIX: Utiliser ?? au lieu de ||
+        price_type: item.price_type || 'daily',
+        has_technical_support: item.has_technical_support ?? false,
+        has_training: item.has_training ?? false,
+        has_insurance: item.has_insurance ?? false,
+        has_delivery: item.has_delivery ?? false,
+        has_recent_maintenance: item.has_recent_maintenance ?? false,
       }));
       
       return equipments;
@@ -449,9 +435,8 @@ export function useEquipments() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast]);
+  }, [user]);
 
-  // Fonction pour mettre à jour un équipement
   const updateEquipment = useCallback(async (
     id: string, 
     equipmentData: Partial<AddEquipmentData>
@@ -463,10 +448,9 @@ export function useEquipments() {
     setIsLoading(true);
     
     try {
-
       const updateData = {
         ...equipmentData,
-        moderation_status: 'pending', // Remettre en attente de validation
+        moderation_status: 'pending',
         status: 'en_attente',
         approved_at: null,
         published_at: null,
@@ -475,7 +459,7 @@ export function useEquipments() {
       
       const { error } = await supabase
         .from('equipments')
-        .update(equipmentData)
+        .update(updateData)
         .eq('id', id)
         .eq('owner_id', user.id);
       
@@ -502,7 +486,6 @@ export function useEquipments() {
     }
   }, [user]);
 
-  // Fonction pour supprimer un équipement
   const deleteEquipment = useCallback(async (id: string): Promise<{ success: boolean; error?: any }> => {
     if (!user?.id) {
       return { success: false, error: "Utilisateur non connecté" };
@@ -511,7 +494,6 @@ export function useEquipments() {
     setIsLoading(true);
     
     try {
-      // Vérifier les réservations actives avant suppression
       const { data: activeBookings, error: bookingError } = await supabase
         .from('bookings')
         .select('id')

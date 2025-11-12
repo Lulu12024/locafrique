@@ -69,7 +69,7 @@ export interface EquipmentData {
   owner?: ProfileData;
   booking_count?: number;
   
-  // ✅ AJOUT : Champs de modération
+  // Champs de modération
   moderation_status?: 'pending' | 'approved' | 'rejected' | null;
   rejected_at?: string | null;
   rejection_reason?: string | null;
@@ -77,6 +77,10 @@ export interface EquipmentData {
   is_premium?: boolean;
   published_at?: string | null;
 
+  // ✅ NOUVEAU : Type de prix pour les chambres/logements
+  price_type?: 'daily' | 'monthly';
+
+  // Champs de fonctionnalités
   has_technical_support?: boolean;
   has_training?: boolean;
   has_insurance?: boolean;
@@ -182,3 +186,104 @@ export interface MockTables {
   payments: PaymentData[];
   contracts: ContractData[];
 }
+
+// ✅ HELPERS UTILITAIRES POUR CHAMBRES/LOGEMENTS
+
+/**
+ * Vérifie si un équipement est une chambre/logement
+ */
+export function isRoomCategory(category: string): boolean {
+  const roomKeywords = ['chambre', 'logement', 'appartement', 'studio'];
+  return roomKeywords.some(keyword => 
+    category.toLowerCase().includes(keyword)
+  );
+}
+
+/**
+ * Formate le prix avec l'unité appropriée
+ */
+export function formatPrice(equipment: EquipmentData): string {
+  const price = equipment.daily_price.toLocaleString();
+  const unit = equipment.price_type === 'monthly' ? 'mois' : 'jour';
+  return `${price} FCFA/${unit}`;
+}
+
+/**
+ * Obtient le label du type de logement
+ */
+export function getRoomTypeLabel(brand?: string): string {
+  const labels: Record<string, string> = {
+    'studio_meuble': 'Studio meublé',
+    'studio_non_meuble': 'Studio non meublé',
+    'appartement_meuble': 'Appartement meublé',
+    'appartement_non_meuble': 'Appartement non meublé',
+    'chambre_meublee': 'Chambre meublée',
+    'chambre_non_meublee': 'Chambre non meublée',
+    'villa': 'Villa/Maison'
+  };
+  
+  return labels[brand || ''] || brand || 'Non spécifié';
+}
+
+/**
+ * Obtient les fonctionnalités actives d'un équipement
+ */
+export function getActiveFeatures(equipment: EquipmentData): Array<{
+  key: string;
+  label: string;
+  icon: string;
+}> {
+  const features = [];
+  const isRoom = isRoomCategory(equipment.category);
+  
+  if (equipment.has_technical_support) {
+    features.push({
+      key: 'technical_support',
+      label: isRoom ? 'Gardien/Concierge' : 'Support technique',
+      icon: '🛠️'
+    });
+  }
+  
+  if (equipment.has_training) {
+    features.push({
+      key: 'training',
+      label: isRoom ? "Aide à l'installation" : 'Formation incluse',
+      icon: '📚'
+    });
+  }
+  
+  if (equipment.has_insurance) {
+    features.push({
+      key: 'insurance',
+      label: isRoom ? 'Assurance habitation' : 'Assurance incluse',
+      icon: '🛡️'
+    });
+  }
+  
+  if (equipment.has_delivery) {
+    features.push({
+      key: 'delivery',
+      label: isRoom ? 'Parking disponible' : 'Livraison possible',
+      icon: '🚚'
+    });
+  }
+  
+  if (equipment.has_recent_maintenance) {
+    features.push({
+      key: 'maintenance',
+      label: isRoom ? 'Entretien régulier' : 'Maintenance récente',
+      icon: '✅'
+    });
+  }
+  
+  return features;
+}
+
+/**
+ * Type helper pour les chambres/logements
+ */
+export type RoomEquipmentData = EquipmentData & {
+  price_type: 'daily' | 'monthly';
+  brand: 'studio_meuble' | 'studio_non_meuble' | 'appartement_meuble' | 
+         'appartement_non_meuble' | 'chambre_meublee' | 'chambre_non_meublee' | 'villa';
+};

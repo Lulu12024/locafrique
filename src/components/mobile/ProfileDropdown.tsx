@@ -5,7 +5,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+// import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { OptimizedAvatar } from '../../components/desktop/OptimizedAvatar';
 import { useAuth } from '@/hooks/auth';
 import { 
   LayoutDashboard, 
@@ -145,12 +146,11 @@ const ProfileDropdown: React.FC = () => {
           aria-label={user ? "Menu profil" : t('menu.signIn')}
         >
           {user ? (
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={profile?.avatar_url} />
-              <AvatarFallback className="bg-green-600 text-white text-xs">
-                {getInitials()}
-              </AvatarFallback>
-            </Avatar>
+            <OptimizedAvatar 
+              src={profile?.avatar_url}
+              fallback={getInitials()}
+              className="h-8 w-8"
+            />
           ) : (
             <User className="h-5 w-5" />
           )}
@@ -162,12 +162,11 @@ const ProfileDropdown: React.FC = () => {
             {/* Profile Header */}
             <div className="px-4 py-3 border-b border-gray-100">
               <div className="flex items-center space-x-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={profile?.avatar_url} />
-                  <AvatarFallback className="bg-green-600 text-white">
-                    {getInitials()}
-                  </AvatarFallback>
-                </Avatar>
+                <OptimizedAvatar 
+                  src={profile?.avatar_url}
+                  fallback={getInitials()}
+                  className="h-10 w-10"
+                />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">
                     {profile?.first_name} {profile?.last_name}

@@ -1,4 +1,4 @@
-// src/components/AddEquipmentModal.tsx - Version avec upload d'images et fonctionnalités
+// src/components/AddEquipmentModal.tsx - VERSION AVEC SUPPORT CHAMBRES À LOUER
 
 import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -7,11 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Loader2, Upload, X, Camera, AlertCircle, CheckCircle, Info } from "lucide-react";
+import { Plus, Loader2, Upload, X, AlertCircle, CheckCircle, Info } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useEquipments } from "@/hooks/useEquipments";
 import { useStorage } from "@/hooks/useStorage";
-import { EQUIPMENT_CATEGORIES } from "@/data/categories";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from '@/integrations/supabase/client';
 
@@ -31,7 +30,6 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
   const { addEquipment, isLoading } = useEquipments();
   const { uploadImage } = useStorage();
   
-  // ✅ MODIFICATION: Ajout des champs booléens pour les fonctionnalités
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -42,9 +40,10 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
     city: "Cotonou",
     country: "Bénin",
     condition: "bon",
-    brand: "",
+    brand: "", // Pour chambres = type_logement
     year: "",
     // ✅ NOUVEAUX CHAMPS
+    price_type: "daily", // "daily" ou "monthly" pour chambres
     has_technical_support: false,
     has_training: false,
     has_insurance: false,
@@ -57,6 +56,11 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
+
+  // ✅ Détection si catégorie = Chambres à louer
+  const selectedCategory = categories.find(cat => cat.id === formData.category);
+  const isRoomCategory = selectedCategory?.name?.toLowerCase().includes("chambre") || 
+                         selectedCategory?.name?.toLowerCase().includes("logement");
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -83,12 +87,10 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
     }
   }, [isOpen]);
 
-  // Gestion de la sélection d'images
   const handleImageSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
       
-      // Vérifier le nombre maximum d'images
       if (selectedImages.length + files.length > 6) {
         toast({
           title: "Trop d'images",
@@ -98,7 +100,6 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
         return;
       }
 
-      // Vérifier la taille et le type des fichiers
       const maxSize = 5 * 1024 * 1024; // 5MB
       const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
       
@@ -125,10 +126,8 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
       });
 
       if (validFiles.length > 0) {
-        // Ajouter les nouveaux fichiers
         setSelectedImages(prev => [...prev, ...validFiles]);
 
-        // Créer les aperçus
         validFiles.forEach(file => {
           const reader = new FileReader();
           reader.onload = (e) => {
@@ -138,22 +137,17 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
         });
       }
 
-      // Réinitialiser l'input
       e.target.value = '';
     }
   };
 
-  // Supprimer une image
   const removeImage = (index: number) => {
     setSelectedImages(prev => prev.filter((_, i) => i !== index));
     setImagePreviews(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Gestion du formulaire
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const selectedCategory = categories.find(cat => cat.id === formData.category);
 
     if (!selectedCategory) {
       toast({
@@ -164,7 +158,6 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
       return;
     }
     
-    // Validation simple
     if (!formData.title || !formData.description || !formData.category || !formData.daily_price) {
       toast({
         title: "Erreur",
@@ -177,7 +170,7 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
     if (Number(formData.daily_price) <= 0) {
       toast({
         title: "Erreur",
-        description: "Le prix journalier doit être supérieur à 0",
+        description: "Le prix doit être supérieur à 0",
         variant: "destructive"
       });
       return;
@@ -186,7 +179,7 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
     if (selectedImages.length < 1) {
       toast({
         title: "Images requises",
-        description: "Veuillez ajouter au moins 1 image de votre équipement.",
+        description: "Veuillez ajouter au moins 1 image.",
         variant: "destructive"
       });
       return;
@@ -196,7 +189,7 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
     setUploadProgress(0);
 
     try {
-      // ✅ MODIFICATION: Inclure les nouveaux champs de fonctionnalités
+      // ✅ Pour chambres : brand stocke le type_logement, year stocke le price_type
       const equipmentData = {
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -207,9 +200,10 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
         city: formData.city,
         country: formData.country,
         condition: formData.condition,
-        brand: formData.brand.trim() || undefined,
-        year: formData.year ? Number(formData.year) : undefined,
-        // ✅ NOUVEAUX CHAMPS FONCTIONNALITÉS
+        brand: formData.brand.trim() || undefined, // type_logement pour chambres
+        year: isRoomCategory ? undefined : (formData.year ? Number(formData.year) : undefined),
+        // ✅ Nouveau champ pour stocker price_type
+        price_type: isRoomCategory ? formData.price_type : undefined,
         has_technical_support: formData.has_technical_support,
         has_training: formData.has_training,
         has_insurance: formData.has_insurance,
@@ -217,21 +211,19 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
         has_recent_maintenance: formData.has_recent_maintenance,
       };
 
-      console.log("📝 Ajout d'équipement via modal:", equipmentData);
+      console.log("📝 Ajout d'équipement:", equipmentData);
 
-      // Étape 1: Créer l'équipement
       const createdEquipment = await addEquipment(equipmentData);
       console.log("✅ Équipement créé:", createdEquipment.id);
       
       setUploadProgress(20);
 
-      // Étape 2: Upload des images
       if (selectedImages.length > 0) {
         console.log("📸 Début de l'upload des images...");
         
         for (let i = 0; i < selectedImages.length; i++) {
           const file = selectedImages[i];
-          const isPrimary = i === 0; // Première image = image principale
+          const isPrimary = i === 0;
           
           try {
             console.log(`📸 Upload image ${i + 1}/${selectedImages.length}: ${file.name}`);
@@ -244,7 +236,6 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
               console.warn(`⚠️ Échec upload ${file.name}:`, uploadResult.error);
             }
             
-            // Mise à jour de la progress bar
             const progress = 20 + ((i + 1) / selectedImages.length) * 80;
             setUploadProgress(progress);
             
@@ -258,14 +249,12 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
 
       setUploadProgress(100);
 
-      // Toast de succès
       toast({
         title: "🎉 Équipement ajouté avec succès !",
         description: `"${formData.title}" avec ${selectedImages.length} image(s)`,
         duration: 5000,
       });
 
-      // ✅ MODIFICATION: Réinitialiser tous les champs y compris les nouveaux
       setFormData({
         title: "",
         description: "",
@@ -278,6 +267,7 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
         condition: "bon",
         brand: "",
         year: "",
+        price_type: "daily",
         has_technical_support: false,
         has_training: false,
         has_insurance: false,
@@ -289,13 +279,11 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
       setImagePreviews([]);
       setUploadProgress(0);
       
-      // Fermer le modal
       onClose();
 
     } catch (error) {
       console.error("❌ Erreur lors de l'ajout de l'équipement:", error);
       
-      // Gestion spéciale de l'erreur 403
       if (error && typeof error === 'object' && 'message' in error) {
         const errorMessage = (error as any).message;
         if (errorMessage.includes('403') || errorMessage.includes('not allowed') || errorMessage.includes('permission')) {
@@ -311,7 +299,6 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
     }
   };
 
-  // ✅ MODIFICATION: Support des valeurs booléennes
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -332,7 +319,6 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Progress bar pendant la soumission */}
           {isSubmitting && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
@@ -346,12 +332,12 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
           {/* Informations de base */}
           <div className="space-y-4">
             <div>
-              <Label htmlFor="title">Titre de l'équipement *</Label>
+              <Label htmlFor="title">Titre *</Label>
               <Input
                 id="title"
                 value={formData.title}
                 onChange={(e) => handleInputChange("title", e.target.value)}
-                placeholder="Ex: Perceuse sans fil Bosch"
+                placeholder={isRoomCategory ? "Ex: Studio meublé centre-ville" : "Ex: Perceuse sans fil Bosch"}
                 disabled={isLoading || isSubmitting}
               />
             </div>
@@ -362,7 +348,7 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
                 id="description"
                 value={formData.description}
                 onChange={(e) => handleInputChange("description", e.target.value)}
-                placeholder="Décrivez votre équipement, son état, ses caractéristiques..."
+                placeholder={isRoomCategory ? "Décrivez le logement, équipements inclus, proximité..." : "Décrivez votre équipement, son état, ses caractéristiques..."}
                 rows={3}
                 disabled={isLoading || isSubmitting}
               />
@@ -390,7 +376,9 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
               </div>
 
               <div>
-                <Label htmlFor="condition">État</Label>
+                <Label htmlFor="condition">
+                  {isRoomCategory ? "État du logement" : "État"}
+                </Label>
                 <Select 
                   value={formData.condition} 
                   onValueChange={(value) => handleInputChange("condition", value)}
@@ -400,52 +388,109 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="neuf">Neuf</SelectItem>
-                    <SelectItem value="excellent">Excellent état</SelectItem>
-                    <SelectItem value="bon">Bon état</SelectItem>
-                    <SelectItem value="correct">État correct</SelectItem>
-                    <SelectItem value="usage">Signes d'usage</SelectItem>
+                    {isRoomCategory ? (
+                      <>
+                        <SelectItem value="neuf">Neuf/Rénové récemment</SelectItem>
+                        <SelectItem value="excellent">Excellent état</SelectItem>
+                        <SelectItem value="bon">Bon état</SelectItem>
+                        <SelectItem value="correct">État correct</SelectItem>
+                        <SelectItem value="usage">À rafraîchir</SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="neuf">Neuf</SelectItem>
+                        <SelectItem value="excellent">Excellent état</SelectItem>
+                        <SelectItem value="bon">Bon état</SelectItem>
+                        <SelectItem value="correct">État correct</SelectItem>
+                        <SelectItem value="usage">Signes d'usage</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
+            {/* ✅ CHAMPS CONDITIONNELS SELON CATÉGORIE */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="brand">Marque</Label>
-                <Input
-                  id="brand"
-                  value={formData.brand}
-                  onChange={(e) => handleInputChange("brand", e.target.value)}
-                  placeholder="Ex: Bosch, Makita..."
+                <Label htmlFor="brand">
+                  {isRoomCategory ? "Type de logement *" : "Marque"}
+                </Label>
+                <Select 
+                  value={formData.brand} 
+                  onValueChange={(value) => handleInputChange("brand", value)}
                   disabled={isLoading || isSubmitting}
-                />
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={isRoomCategory ? "Sélectionner le type" : "Ex: Bosch, Makita..."} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {isRoomCategory ? (
+                      <>
+                        <SelectItem value="studio_meuble">Studio meublé</SelectItem>
+                        <SelectItem value="studio_non_meuble">Studio non meublé</SelectItem>
+                        <SelectItem value="appartement_meuble">Appartement meublé</SelectItem>
+                        <SelectItem value="appartement_non_meuble">Appartement non meublé</SelectItem>
+                        <SelectItem value="chambre_meublee">Chambre meublée</SelectItem>
+                        <SelectItem value="chambre_non_meublee">Chambre non meublée</SelectItem>
+                        <SelectItem value="villa">Villa/Maison</SelectItem>
+                      </>
+                    ) : (
+                      <SelectItem value="autre">Autre marque</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div>
-                <Label htmlFor="year">Année</Label>
-                <Input
-                  id="year"
-                  type="number"
-                  value={formData.year}
-                  onChange={(e) => handleInputChange("year", e.target.value)}
-                  placeholder="2020"
-                  min="1990"
-                  max={new Date().getFullYear() + 1}
-                  disabled={isLoading || isSubmitting}
-                />
-              </div>
+              {/* ✅ Année pour équipements OU Type de prix pour chambres */}
+              {!isRoomCategory ? (
+                <div>
+                  <Label htmlFor="year">Année</Label>
+                  <Input
+                    id="year"
+                    type="number"
+                    value={formData.year}
+                    onChange={(e) => handleInputChange("year", e.target.value)}
+                    placeholder="2020"
+                    min="1990"
+                    max={new Date().getFullYear() + 1}
+                    disabled={isLoading || isSubmitting}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <Label htmlFor="price_type">Type de prix *</Label>
+                  <Select 
+                    value={formData.price_type} 
+                    onValueChange={(value) => handleInputChange("price_type", value)}
+                    disabled={isLoading || isSubmitting}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Prix journalier</SelectItem>
+                      <SelectItem value="monthly">Prix mensuel</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* ========== ✅ NOUVELLE SECTION: FONCTIONNALITÉS ========== */}
+          {/* ✅ Section Fonctionnalités */}
           <div className="border rounded-lg p-4 bg-gray-50">
             <div className="flex items-center gap-2 mb-3">
               <CheckCircle className="h-5 w-5 text-green-600" />
-              <h3 className="font-semibold text-gray-900">Ce que propose cet équipement</h3>
+              <h3 className="font-semibold text-gray-900">
+                {isRoomCategory ? "Services inclus" : "Ce que propose cet équipement"}
+              </h3>
             </div>
             <p className="text-sm text-gray-600 mb-4">
-              Cochez les services et avantages inclus avec votre équipement
+              {isRoomCategory 
+                ? "Cochez les services et équipements disponibles dans le logement"
+                : "Cochez les services et avantages inclus avec votre équipement"
+              }
             </p>
             
             <div className="space-y-3">
@@ -460,11 +505,11 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
                   disabled={isSubmitting}
                 />
                 <Label htmlFor="has_technical_support" className="text-sm font-normal cursor-pointer flex-1">
-                  Support technique disponible
+                  {isRoomCategory ? "Gardien/Concierge disponible" : "Support technique disponible"}
                 </Label>
               </div>
 
-              {/* Formation incluse */}
+              {/* Formation/Aide */}
               <div className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 transition-colors">
                 <input
                   type="checkbox"
@@ -475,11 +520,11 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
                   disabled={isSubmitting}
                 />
                 <Label htmlFor="has_training" className="text-sm font-normal cursor-pointer flex-1">
-                  Formation incluse pour l'utilisation
+                  {isRoomCategory ? "Aide à l'installation" : "Formation incluse pour l'utilisation"}
                 </Label>
               </div>
 
-              {/* Assurance incluse */}
+              {/* Assurance */}
               <div className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 transition-colors">
                 <input
                   type="checkbox"
@@ -490,11 +535,11 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
                   disabled={isSubmitting}
                 />
                 <Label htmlFor="has_insurance" className="text-sm font-normal cursor-pointer flex-1">
-                  Assurance incluse dans le prix
+                  {isRoomCategory ? "Assurance habitation incluse" : "Assurance incluse dans le prix"}
                 </Label>
               </div>
 
-              {/* Livraison possible */}
+              {/* Livraison */}
               <div className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 transition-colors">
                 <input
                   type="checkbox"
@@ -505,11 +550,11 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
                   disabled={isSubmitting}
                 />
                 <Label htmlFor="has_delivery" className="text-sm font-normal cursor-pointer flex-1">
-                  Livraison possible (peut être payante)
+                  {isRoomCategory ? "Parking disponible" : "Livraison possible"}
                 </Label>
               </div>
 
-              {/* Maintenance récente */}
+              {/* Maintenance */}
               <div className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 transition-colors">
                 <input
                   type="checkbox"
@@ -520,47 +565,43 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
                   disabled={isSubmitting}
                 />
                 <Label htmlFor="has_recent_maintenance" className="text-sm font-normal cursor-pointer flex-1">
-                  Maintenance récente effectuée
+                  {isRoomCategory ? "Entretien régulier assuré" : "Maintenance récente effectuée"}
                 </Label>
               </div>
             </div>
-
-            {/* Info supplémentaire */}
-            <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200">
-              <p className="text-xs text-blue-800 flex items-start gap-2">
-                <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                <span>
-                  Ces informations seront affichées sur votre annonce. Cochez uniquement les options réellement disponibles.
-                </span>
-              </p>
-            </div>
           </div>
-          {/* ========== FIN NOUVELLE SECTION ========== */}
 
           {/* Prix */}
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="daily_price">Prix journalier (FCFA) *</Label>
+                <Label htmlFor="daily_price">
+                  {isRoomCategory 
+                    ? (formData.price_type === "monthly" ? "Prix mensuel (FCFA) *" : "Prix journalier (FCFA) *")
+                    : "Prix journalier (FCFA) *"
+                  }
+                </Label>
                 <Input
                   id="daily_price"
                   type="number"
                   value={formData.daily_price}
                   onChange={(e) => handleInputChange("daily_price", e.target.value)}
-                  placeholder="5000"
+                  placeholder={isRoomCategory && formData.price_type === "monthly" ? "50000" : "5000"}
                   min="1"
                   disabled={isLoading || isSubmitting}
                 />
               </div>
 
               <div>
-                <Label htmlFor="deposit_amount">Caution (FCFA)</Label>
+                <Label htmlFor="deposit_amount">
+                  {isRoomCategory ? "Caution/Avance (FCFA)" : "Caution (FCFA)"}
+                </Label>
                 <Input
                   id="deposit_amount"
                   type="number"
                   value={formData.deposit_amount}
                   onChange={(e) => handleInputChange("deposit_amount", e.target.value)}
-                  placeholder="10000"
+                  placeholder={isRoomCategory ? "50000" : "10000"}
                   min="0"
                   disabled={isLoading || isSubmitting}
                 />
@@ -571,9 +612,12 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
           {/* Images */}
           <div className="space-y-4">
             <div>
-              <Label>Photos de l'équipement *</Label>
+              <Label>Photos *</Label>
               <p className="text-sm text-gray-600 mb-3">
-                Ajoutez des photos attrayantes de votre équipement (minimum 1, maximum 6)
+                {isRoomCategory 
+                  ? "Ajoutez des photos du logement (minimum 1, maximum 6)"
+                  : "Ajoutez des photos de votre équipement (minimum 1, maximum 6)"
+                }
               </p>
               
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
@@ -597,7 +641,6 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
                 </label>
               </div>
 
-              {/* Aperçu des images sélectionnées */}
               {selectedImages.length > 0 && (
                 <div className="mt-4">
                   <p className="text-sm font-medium mb-2">
@@ -635,12 +678,14 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
           {/* Localisation */}
           <div className="space-y-4">
             <div>
-              <Label htmlFor="location">Adresse</Label>
+              <Label htmlFor="location">
+                {isRoomCategory ? "Adresse précise *" : "Adresse"}
+              </Label>
               <Input
                 id="location"
                 value={formData.location}
                 onChange={(e) => handleInputChange("location", e.target.value)}
-                placeholder="Quartier, rue..."
+                placeholder={isRoomCategory ? "Quartier, rue, proximité..." : "Quartier, rue..."}
                 disabled={isLoading || isSubmitting}
               />
             </div>
@@ -677,7 +722,7 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
             </div>
           </div>
 
-          {/* Note sur l'erreur 403 */}
+          {/* Avertissement */}
           <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
             <div className="flex items-start">
               <AlertCircle className="h-6 w-6 text-orange-600 mt-0.5 mr-3 flex-shrink-0" />
@@ -715,7 +760,7 @@ const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({ isOpen, onClose }
               ) : (
                 <>
                   <Plus className="h-4 w-4 mr-2" />
-                  Ajouter l'équipement
+                  {isRoomCategory ? "Publier le logement" : "Ajouter l'équipement"}
                 </>
               )}
             </Button>

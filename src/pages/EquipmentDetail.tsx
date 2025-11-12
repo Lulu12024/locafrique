@@ -1,4 +1,4 @@
-// src/pages/EquipmentDetail.tsx - VERSION CORRIGÉE SANS MÉTRIQUES FAUSSES
+// src/pages/EquipmentDetail.tsx - VERSION ADAPTÉE CHAMBRES & ÉQUIPEMENTS
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,9 +30,10 @@ import {
   Camera,
   Hammer,
   Flower,
-  Phone
+  Phone,
+  Home
 } from 'lucide-react';
-import { EquipmentData } from '@/types/supabase';
+import { EquipmentData, isRoomCategory, formatPrice as formatPriceHelper, getRoomTypeLabel } from '@/types/supabase';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import ReservationModal from '@/components/booking/ReservationModal';
@@ -92,7 +93,13 @@ const SafeImage: React.FC<SafeImageProps> = ({
 
   const getCategoryIcon = () => {
     const iconClass = "h-16 w-16 text-green-600";
-    switch(category?.toLowerCase()) {
+    const categoryLower = category?.toLowerCase() || '';
+    
+    if (isRoomCategory(category || '')) {
+      return <Home className={iconClass} />;
+    }
+    
+    switch(categoryLower) {
       case 'electromenager':
       case 'électroménager':
         return <Package className={iconClass} />;
@@ -114,7 +121,7 @@ const SafeImage: React.FC<SafeImageProps> = ({
         <div className="text-center">
           {getCategoryIcon()}
           <p className="mt-3 text-sm font-medium text-green-700">
-            {category || 'Équipement'}
+            {category || 'Annonce'}
           </p>
           <p className="text-xs text-green-600 mt-1">Image bientôt disponible</p>
         </div>
@@ -152,26 +159,18 @@ const EquipmentDetail = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   
-  // Détection mobile plus robuste
   const [isMobile, setIsMobile] = useState(false);
   
   useEffect(() => {
     const checkMobile = () => {
-      const mobile = window.innerWidth < 1024; // lg breakpoint
+      const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
-      console.log('📱 Mobile détecté:', mobile, '- Largeur:', window.innerWidth);
     };
     
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
-  
-  // Debug: vérifier la détection mobile
-  useEffect(() => {
-    console.log('🔍 isMobile:', isMobile);
-    console.log('📱 window.innerWidth:', window.innerWidth);
-  }, [isMobile]);
   
   const [equipment, setEquipment] = useState<EquipmentData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -189,7 +188,6 @@ const EquipmentDetail = () => {
   const [activeSection, setActiveSection] = useState('photos');
   const [showStickyBooking, setShowStickyBooking] = useState(false);
 
-  // Refs pour les sections
   const photosRef = React.useRef<HTMLDivElement>(null);
   const aboutRef = React.useRef<HTMLDivElement>(null);
   const reviewsRef = React.useRef<HTMLDivElement>(null);
@@ -203,6 +201,13 @@ const EquipmentDetail = () => {
     responseRate: 0,
     lastBookingDate: null as string | null
   });
+
+  // ✅ Détection si c'est une chambre
+  const isRoom = equipment ? isRoomCategory(equipment.category) : false;
+  
+  // ✅ Labels adaptatifs
+  const itemLabel = isRoom ? 'logement' : 'équipement';
+  const ItemLabel = isRoom ? 'Logement' : 'Équipement';
 
   const getImages = () => {
     try {
@@ -230,13 +235,12 @@ const EquipmentDetail = () => {
   useEffect(() => {
     const fetchEquipment = async () => {
       if (!id) {
-        setError("ID d'équipement manquant");
+        setError("ID manquant");
         setIsLoading(false);
         return;
       }
 
       try {
-        // Charger l'équipement
         const { data: equipmentData, error: fetchError } = await supabase
           .from('equipments')
           .select('*')
@@ -245,14 +249,14 @@ const EquipmentDetail = () => {
 
         if (fetchError) {
           console.error("❌ Erreur:", fetchError);
-          setError("Équipement non trouvé");
+          setError("Annonce non trouvée");
           setIsLoading(false);
           return;
         }
 
-        console.log("✅ Équipement chargé:", equipmentData);
+        console.log("✅ Annonce chargée:", equipmentData);
         await checkPendingBooking(id);
-        // Charger les images
+        
         const { data: imagesData } = await supabase
           .from('equipment_images')
           .select('*')
@@ -260,10 +264,7 @@ const EquipmentDetail = () => {
 
         equipmentData.images = imagesData || [];
 
-        // Charger le propriétaire avec owner_id
         if (equipmentData.owner_id) {
-          console.log("👤 Chargement du propriétaire avec ID:", equipmentData.owner_id);
-          
           const { data: ownerData, error: ownerError } = await supabase
             .from('profiles')
             .select('id, first_name, last_name, avatar_url, created_at, phone_number')
@@ -271,11 +272,6 @@ const EquipmentDetail = () => {
             .maybeSingle();
 
           if (ownerError) {
-            console.error("❌ Erreur chargement propriétaire:", ownerError);
-            console.error("❌ Code erreur:", ownerError.code);
-            console.error("❌ Message:", ownerError.message);
-            
-            // Si erreur de permissions, créer un profil par défaut
             equipmentData.owner = {
               id: equipmentData.owner_id,
               first_name: 'Propriétaire',
@@ -283,11 +279,8 @@ const EquipmentDetail = () => {
               avatar_url: null
             };
           } else if (ownerData) {
-            console.log("✅ Propriétaire trouvé:", ownerData);
             equipmentData.owner = ownerData;
           } else {
-            console.warn("⚠️ Aucun profil retourné (peut-être RLS?)");
-            // Créer un profil par défaut
             equipmentData.owner = {
               id: equipmentData.owner_id,
               first_name: 'Propriétaire',
@@ -300,8 +293,6 @@ const EquipmentDetail = () => {
         setEquipment(equipmentData);
         await loadEquipmentStats(id);
         
-        
-        // Charger les équipements similaires
         if (equipmentData.category) {
           await loadSimilarEquipments(equipmentData.category, id);
         }
@@ -316,27 +307,21 @@ const EquipmentDetail = () => {
     fetchEquipment();
   }, [id]);
 
-  // Vérifier les réservations en attente quand l'utilisateur change
   useEffect(() => {
     if (id) {
       checkPendingBooking(id);
     }
   }, [user, id]);
 
-  // Détecter le scroll pour afficher le menu sticky
   useEffect(() => {
     const handleScroll = () => {
-      // Afficher le menu après avoir scrollé 600px (après les images)
       setShowStickyNav(window.scrollY > 600);
 
-      // Détecter si on a dépassé la carte de réservation
       if (bookingCardRef.current) {
         const rect = bookingCardRef.current.getBoundingClientRect();
-        // Si la carte est au-dessus de l'écran (on l'a dépassée)
         setShowStickyBooking(rect.bottom < 100);
       }
 
-      // Détecter quelle section est visible
       const sections = [
         { ref: photosRef, id: 'photos' },
         { ref: aboutRef, id: 'about' },
@@ -359,10 +344,9 @@ const EquipmentDetail = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Fonction pour scroller vers une section
   const scrollToSection = (ref: React.RefObject<HTMLDivElement>) => {
     if (ref.current) {
-      const top = ref.current.offsetTop - 140; // 140px = hauteur du header + menu sticky
+      const top = ref.current.offsetTop - 140;
       window.scrollTo({ top, behavior: 'smooth' });
     }
   };
@@ -409,7 +393,6 @@ const EquipmentDetail = () => {
     }
   };
 
-  // Vérifier si l'utilisateur a déjà une réservation en attente
   const checkPendingBooking = async (equipmentId: string) => {
     if (!user) {
       setHasPendingBooking(false);
@@ -429,7 +412,6 @@ const EquipmentDetail = () => {
         return;
       }
 
-      // Si on a au moins une réservation en attente ou confirmée
       const hasPending = pendingBookings && pendingBookings.length > 0;
       setHasPendingBooking(hasPending);
       
@@ -441,7 +423,6 @@ const EquipmentDetail = () => {
     }
   };
 
-  // Charger les équipements similaires
   const loadSimilarEquipments = async (category: string, currentId: string) => {
     try {
       const { data, error } = await supabase
@@ -454,10 +435,10 @@ const EquipmentDetail = () => {
 
       if (!error && data) {
         setSimilarEquipments(data);
-        console.log("✅ Équipements similaires chargés:", data.length);
+        console.log("✅ Annonces similaires chargées:", data.length);
       }
     } catch (error) {
-      console.error("❌ Erreur chargement équipements similaires:", error);
+      console.error("❌ Erreur chargement annonces similaires:", error);
     }
   };
 
@@ -468,7 +449,7 @@ const EquipmentDetail = () => {
     });
     if (id) {
       loadEquipmentStats(id);
-      checkPendingBooking(id); // Re-vérifier les réservations en attente
+      checkPendingBooking(id);
     }
   };
 
@@ -527,14 +508,15 @@ const EquipmentDetail = () => {
     }
   };
 
-  const handleOwnerClick = () => {
-    if (equipment.owner?.id) {
-      navigate(`/owner/profile/${equipment.owner.id}`);
-    }
-  };
-
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('fr-FR').format(price);
+  };
+  
+  // ✅ Prix avec unité adaptée
+  const getPriceDisplay = () => {
+    if (!equipment) return { price: 0, unit: 'jour' };
+    const unit = equipment.price_type === 'monthly' ? 'mois' : 'jour';
+    return { price: equipment.daily_price, unit };
   };
 
   const getAvailabilityBadge = () => {
@@ -574,7 +556,7 @@ const EquipmentDetail = () => {
         <Card className="p-8 max-w-md mx-auto">
           <div className="text-center">
             <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Équipement non trouvé</h2>
+            <h2 className="text-xl font-semibold mb-2">Annonce non trouvée</h2>
             <p className="text-gray-600 mb-4">{error}</p>
             <Button onClick={() => navigate(-1)} variant="outline">
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -585,6 +567,8 @@ const EquipmentDetail = () => {
       </div>
     );
   }
+
+  const { price, unit } = getPriceDisplay();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -627,12 +611,11 @@ const EquipmentDetail = () => {
         </div>
       </div>
 
-      {/* MENU DE NAVIGATION STICKY (apparaît au scroll) */}
+      {/* MENU DE NAVIGATION STICKY */}
       {!isMobile && showStickyNav && (
         <div className="fixed top-16 left-0 right-0 z-40 bg-white border-b border-gray-200 shadow-sm">
           <div className="max-w-7xl mx-auto px-6">
             <div className="flex items-center justify-between h-14">
-              {/* Navigation gauche */}
               <nav className="flex items-center space-x-8">
                 <button
                   onClick={() => scrollToSection(photosRef)}
@@ -653,7 +636,7 @@ const EquipmentDetail = () => {
                       : 'text-gray-600 border-transparent hover:text-gray-900'
                   }`}
                 >
-                  Équipements
+                  {isRoom ? 'À propos' : 'Détails'}
                 </button>
                 
                 <button
@@ -667,26 +650,28 @@ const EquipmentDetail = () => {
                   Commentaires
                 </button>
                 
-                <button
-                  onClick={() => scrollToSection(calendarRef)}
-                  className={`text-sm font-medium transition-colors pb-4 border-b-2 ${
-                    activeSection === 'calendar'
-                      ? 'text-gray-900 border-gray-900'
-                      : 'text-gray-600 border-transparent hover:text-gray-900'
-                  }`}
-                >
-                  Calendrier
-                </button>
+                {/* ✅ Calendrier uniquement pour équipements */}
+                {!isRoom && (
+                  <button
+                    onClick={() => scrollToSection(calendarRef)}
+                    className={`text-sm font-medium transition-colors pb-4 border-b-2 ${
+                      activeSection === 'calendar'
+                        ? 'text-gray-900 border-gray-900'
+                        : 'text-gray-600 border-transparent hover:text-gray-900'
+                    }`}
+                  >
+                    Calendrier
+                  </button>
+                )}
               </nav>
 
-              {/* Bouton de réservation (apparaît quand on dépasse la carte) */}
               {showStickyBooking && (
                 <div className="flex items-center gap-4">
                   <div className="text-right">
                     <div className="font-semibold text-gray-900">
-                      {formatPrice(equipment.daily_price)} FCFA
+                      {formatPrice(price)} FCFA
                     </div>
-                    <div className="text-xs text-gray-600">par jour</div>
+                    <div className="text-xs text-gray-600">par {unit}</div>
                   </div>
                   
                   <Button
@@ -702,7 +687,7 @@ const EquipmentDetail = () => {
                       if (hasPendingBooking) {
                         toast({
                           title: "Réservation en attente",
-                          description: "Vous avez déjà une réservation en attente pour cet équipement.",
+                          description: "Vous avez déjà une réservation en attente.",
                           variant: "destructive"
                         });
                         return;
@@ -725,10 +710,9 @@ const EquipmentDetail = () => {
       <div className="pt-16 pb-32">
         <div className={`max-w-7xl mx-auto ${isMobile ? 'px-4 py-4' : 'px-6 py-6'}`}>
           
-          {/* GALERIE D'IMAGES - PLEINE LARGEUR EN HAUT */}
+          {/* GALERIE D'IMAGES */}
           <div ref={photosRef}>
           {isMobile ? (
-            /* MOBILE - Carrousel */
             <Card className="overflow-hidden mb-6">
               <div className="relative">
                 <div className="aspect-[4/3] bg-gray-200 relative overflow-hidden">
@@ -800,7 +784,6 @@ const EquipmentDetail = () => {
               </div>
             </Card>
           ) : (
-            /* DESKTOP - Grille Airbnb PLEINE LARGEUR */
             <div className="relative grid grid-cols-4 grid-rows-2 gap-2 h-[480px] rounded-xl overflow-hidden mb-8">
               <button 
                 onClick={() => setCurrentImageIndex(0)}
@@ -870,18 +853,29 @@ const EquipmentDetail = () => {
           )}
           </div>
 
-          {/* CONTENU + SIDEBAR EN DESSOUS DES IMAGES */}
+          {/* CONTENU + SIDEBAR */}
           <div className={`grid grid-cols-1 ${isMobile ? 'gap-6 pb-20' : 'lg:grid-cols-3 gap-6 lg:gap-8'}`}>
             
-            {/* Colonne principale - Détails */}
+            {/* Colonne principale */}
             <div className={`${isMobile ? 'space-y-6' : 'lg:col-span-2 space-y-8'}`}>
 
               {/* Titre */}
               <div className={`${isMobile ? 'space-y-4' : 'space-y-6'}`}>
                 <div className={`flex items-center space-x-2 text-sm text-gray-600 ${isMobile ? 'flex-wrap' : ''}`}>
                   <span>{equipment.category}</span>
-                  <span>•</span>
-                  <span>{equipment.subcategory || 'Équipement professionnel'}</span>
+                  {equipment.subcategory && (
+                    <>
+                      <span>•</span>
+                      <span>{equipment.subcategory}</span>
+                    </>
+                  )}
+                  {/* ✅ Type de logement pour chambres */}
+                  {isRoom && equipment.brand && (
+                    <>
+                      <span>•</span>
+                      <span>{getRoomTypeLabel(equipment.brand)}</span>
+                    </>
+                  )}
                   <span>•</span>
                   <span className="flex items-center">
                     <MapPin className="h-4 w-4 mr-1" />
@@ -905,7 +899,7 @@ const EquipmentDetail = () => {
                   </div>
                   <div className="flex items-center text-gray-600">
                     <Users className="h-5 w-5 mr-1" />
-                    <span>{equipmentStats.totalBookings} locations</span>
+                    <span>{equipmentStats.totalBookings} {isRoom ? 'réservations' : 'locations'}</span>
                   </div>
                 </div>
               </div>
@@ -917,49 +911,47 @@ const EquipmentDetail = () => {
                     <>
                       <h3 className="text-lg font-semibold mb-4">Description</h3>
                       <p className="text-gray-700 leading-relaxed mb-4 whitespace-pre-line">
-                        {equipment.description || 'Équipement professionnel de qualité.'}
+                        {equipment.description || `${ItemLabel} de qualité.`}
                       </p>
                       
                       <div className="grid grid-cols-1 gap-4">
-                        {/* Équipement vérifié - toujours affiché */}
                         <div className="flex items-center text-sm">
                           <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                          <span>Équipement vérifié</span>
+                          <span>{isRoom ? 'Logement vérifié' : 'Équipement vérifié'}</span>
                         </div>
 
-                        {/* Options dynamiques */}
                         {equipment.has_technical_support && (
                           <div className="flex items-center text-sm">
                             <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                            <span>Support technique</span>
+                            <span>{isRoom ? 'Gardien/Concierge' : 'Support technique'}</span>
                           </div>
                         )}
                         
                         {equipment.has_training && (
                           <div className="flex items-center text-sm">
                             <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                            <span>Formation incluse</span>
+                            <span>{isRoom ? "Aide à l'installation" : 'Formation incluse'}</span>
                           </div>
                         )}
                         
                         {equipment.has_insurance && (
                           <div className="flex items-center text-sm">
                             <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                            <span>Assurance incluse</span>
+                            <span>{isRoom ? 'Assurance habitation' : 'Assurance incluse'}</span>
                           </div>
                         )}
                         
                         {equipment.has_delivery && (
                           <div className="flex items-center text-sm">
                             <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                            <span>Livraison possible</span>
+                            <span>{isRoom ? 'Parking disponible' : 'Livraison possible'}</span>
                           </div>
                         )}
                         
                         {equipment.has_recent_maintenance && (
                           <div className="flex items-center text-sm">
                             <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                            <span>Maintenance récente</span>
+                            <span>{isRoom ? 'Entretien régulier' : 'Maintenance récente'}</span>
                           </div>
                         )}
                       </div>
@@ -968,56 +960,58 @@ const EquipmentDetail = () => {
                     <>
                       <div className="space-y-6">
                         <div>
-                          <h3 className="text-xl font-semibold mb-4">À propos de cet équipement</h3>
+                          <h3 className="text-xl font-semibold mb-4">
+                            {isRoom ? 'À propos de ce logement' : 'À propos de cet équipement'}
+                          </h3>
                           <p className="text-gray-700 text-base leading-relaxed whitespace-pre-line">
-                            {equipment.description || 'Équipement professionnel de qualité supérieure, idéal pour vos projets. Matériel régulièrement entretenu et vérifié.'}
+                            {equipment.description || `${ItemLabel} de qualité supérieure.`}
                           </p>
                         </div>
 
                         <Separator />
 
                         <div>
-                          <h3 className="text-xl font-semibold mb-6">Ce que propose cet équipement</h3>
+                          <h3 className="text-xl font-semibold mb-6">
+                            {isRoom ? 'Ce que propose ce logement' : 'Ce que propose cet équipement'}
+                          </h3>
                           <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                            {/* Équipement vérifié - toujours affiché */}
                             <div className="flex items-center">
                               <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-                              <span className="text-gray-700">Équipement vérifié</span>
+                              <span className="text-gray-700">{isRoom ? 'Logement vérifié' : 'Équipement vérifié'}</span>
                             </div>
 
-                            {/* Options dynamiques - affichées seulement si cochées */}
                             {equipment.has_technical_support && (
                               <div className="flex items-center">
                                 <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-                                <span className="text-gray-700">Support technique</span>
+                                <span className="text-gray-700">{isRoom ? 'Gardien/Concierge' : 'Support technique'}</span>
                               </div>
                             )}
                             
                             {equipment.has_training && (
                               <div className="flex items-center">
                                 <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-                                <span className="text-gray-700">Formation incluse</span>
+                                <span className="text-gray-700">{isRoom ? "Aide à l'installation" : 'Formation incluse'}</span>
                               </div>
                             )}
                             
                             {equipment.has_insurance && (
                               <div className="flex items-center">
                                 <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-                                <span className="text-gray-700">Assurance incluse</span>
+                                <span className="text-gray-700">{isRoom ? 'Assurance habitation' : 'Assurance incluse'}</span>
                               </div>
                             )}
                             
                             {equipment.has_delivery && (
                               <div className="flex items-center">
                                 <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-                                <span className="text-gray-700">Livraison possible</span>
+                                <span className="text-gray-700">{isRoom ? 'Parking disponible' : 'Livraison possible'}</span>
                               </div>
                             )}
                             
                             {equipment.has_recent_maintenance && (
                               <div className="flex items-center">
                                 <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
-                                <span className="text-gray-700">Maintenance récente</span>
+                                <span className="text-gray-700">{isRoom ? 'Entretien régulier' : 'Maintenance récente'}</span>
                               </div>
                             )}
                           </div>
@@ -1098,9 +1092,7 @@ const EquipmentDetail = () => {
                       </div>
                     </button>
                     
-                    {/* Boutons d'action - Responsive */}
                     <div className={`${isMobile ? 'flex gap-2 w-full' : 'flex gap-2'}`}>
-                      {/* Bouton Appeler (si numéro disponible) */}
                       {equipment?.owner?.phone_number && (
                         <Button
                           asChild
@@ -1114,7 +1106,6 @@ const EquipmentDetail = () => {
                         </Button>
                       )}
                       
-                      {/* Bouton Contacter */}
                       <div className={equipment?.owner?.phone_number && isMobile ? 'flex-1' : ''}>
                         <ContactOwnerButton
                           ownerId={equipment.owner_id}
@@ -1176,20 +1167,22 @@ const EquipmentDetail = () => {
                 </CardContent>
               </Card>
 
-              {/* CALENDRIER DE DISPONIBILITÉ */}
-              <div ref={calendarRef} id="calendar" className="scroll-mt-20">
-                <AvailabilityCalendar 
-                  equipmentId={equipment.id}
-                  showLegend={true}
-                  compact={isMobile}
-                />
-              </div>
+              {/* ✅ CALENDRIER - Uniquement pour équipements */}
+              {!isRoom && (
+                <div ref={calendarRef} id="calendar" className="scroll-mt-20">
+                  <AvailabilityCalendar 
+                    equipmentId={equipment.id}
+                    showLegend={true}
+                    compact={isMobile}
+                  />
+                </div>
+              )}
 
               {/* CARTE DE LOCALISATION */}
               <Card>
                 <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
                   <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>
-                    Où récupérer l'équipement
+                    {isRoom ? 'Où se situe le logement' : 'Où récupérer l\'équipement'}
                   </h3>
                   
                   <div className="space-y-4">
@@ -1205,7 +1198,6 @@ const EquipmentDetail = () => {
                       </div>
                     </div>
                     
-                    {/* Carte Google Maps intégrée */}
                     <div className="w-full h-96 bg-gray-200 rounded-lg overflow-hidden relative">
                       <iframe
                         width="100%"
@@ -1216,7 +1208,7 @@ const EquipmentDetail = () => {
                         src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(`${equipment.city}, ${equipment.country}`)}&zoom=13`}
                         allowFullScreen
                         loading="lazy"
-                        title="Localisation de l'équipement"
+                        title="Localisation"
                       />
                     </div>
                     
@@ -1240,7 +1232,6 @@ const EquipmentDetail = () => {
                   </h3>
                   
                   <div className={`grid ${isMobile ? 'grid-cols-1 gap-6' : 'grid-cols-3 gap-8'}`}>
-                    {/* Règles de location */}
                     <div>
                       <h4 className="font-semibold mb-4 flex items-center gap-2">
                         <Package className="h-5 w-5 text-green-600" />
@@ -1266,7 +1257,6 @@ const EquipmentDetail = () => {
                       </ul>
                     </div>
 
-                    {/* Santé et sécurité */}
                     <div>
                       <h4 className="font-semibold mb-4 flex items-center gap-2">
                         <Shield className="h-5 w-5 text-green-600" />
@@ -1275,7 +1265,7 @@ const EquipmentDetail = () => {
                       <ul className="space-y-2 text-sm text-gray-700">
                         <li className="flex items-start gap-2">
                           <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                          <span>Équipement vérifié régulièrement</span>
+                          <span>{isRoom ? 'Logement vérifié' : 'Équipement vérifié'} régulièrement</span>
                         </li>
                         <li className="flex items-start gap-2">
                           <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
@@ -1287,12 +1277,11 @@ const EquipmentDetail = () => {
                         </li>
                         <li className="flex items-start gap-2">
                           <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                          <span>Support technique disponible</span>
+                          <span>Support disponible</span>
                         </li>
                       </ul>
                     </div>
 
-                    {/* Politique d'annulation */}
                     <div>
                       <h4 className="font-semibold mb-4 flex items-center gap-2">
                         <Clock className="h-5 w-5 text-green-600" />
@@ -1321,12 +1310,12 @@ const EquipmentDetail = () => {
                 </CardContent>
               </Card>
 
-              {/* ÉQUIPEMENTS SIMILAIRES */}
+              {/* ANNONCES SIMILAIRES */}
               {similarEquipments.length > 0 && (
                 <Card>
                   <CardContent className={`${isMobile ? 'p-4' : 'p-8'}`}>
                     <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold mb-6`}>
-                      Équipements similaires
+                      Annonces similaires
                     </h3>
                     
                     <div className={`grid ${isMobile ? 'grid-cols-1 gap-4' : 'grid-cols-2 lg:grid-cols-4 gap-4'}`}>
@@ -1363,7 +1352,9 @@ const EquipmentDetail = () => {
                                 <span className="font-semibold text-green-600">
                                   {formatPrice(item.daily_price)} FCFA
                                 </span>
-                                <span className="text-xs text-gray-500">par jour</span>
+                                <span className="text-xs text-gray-500">
+                                  par {item.price_type === 'monthly' ? 'mois' : 'jour'}
+                                </span>
                               </div>
                             </div>
                           </button>
@@ -1386,9 +1377,9 @@ const EquipmentDetail = () => {
                     <>
                       <div className="text-center mb-6">
                         <div className="text-2xl font-bold text-green-600">
-                          {formatPrice(equipment.daily_price)} FCFA
+                          {formatPrice(price)} FCFA
                         </div>
-                        <div className="text-gray-600">par jour</div>
+                        <div className="text-gray-600">par {unit}</div>
                         
                         <div className="mt-2 p-2 bg-orange-50 rounded-lg">
                           <div className="flex items-center justify-center text-orange-700 text-sm">
@@ -1397,16 +1388,19 @@ const EquipmentDetail = () => {
                           </div>
                         </div>
                         
-                        <div className="mt-4 space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span>Semaine (7j):</span>
-                            <span className="font-medium">{formatPrice(equipment.daily_price * 7 * 0.93)} FCFA</span>
+                        {/* ✅ Tarifs adaptatifs */}
+                        {!isRoom && (
+                          <div className="mt-4 space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span>Semaine (7j):</span>
+                              <span className="font-medium">{formatPrice(price * 7 * 0.93)} FCFA</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Mois (30j):</span>
+                              <span className="font-medium">{formatPrice(price * 30 * 0.85)} FCFA</span>
+                            </div>
                           </div>
-                          <div className="flex justify-between">
-                            <span>Mois (30j):</span>
-                            <span className="font-medium">{formatPrice(equipment.daily_price * 30 * 0.85)} FCFA</span>
-                          </div>
-                        </div>
+                        )}
                       </div>
 
                       <Separator className="my-6" />
@@ -1449,9 +1443,9 @@ const EquipmentDetail = () => {
                       <div className="mb-6">
                         <div className="flex items-baseline gap-1">
                           <span className="text-2xl font-semibold text-gray-900">
-                            {formatPrice(equipment.daily_price)} FCFA
+                            {formatPrice(price)} FCFA
                           </span>
-                          <span className="text-gray-600">par jour</span>
+                          <span className="text-gray-600">par {unit}</span>
                         </div>
                         
                         {equipmentStats.reviewCount > 0 && (
@@ -1465,22 +1459,27 @@ const EquipmentDetail = () => {
 
                       <Separator className="my-5" />
 
-                      <div className="space-y-3 mb-5">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-700">Tarif semaine (7j)</span>
-                          <span className="font-medium">{formatPrice(equipment.daily_price * 7 * 0.93)} FCFA</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-700">Tarif mois (30j)</span>
-                          <span className="font-medium">{formatPrice(equipment.daily_price * 30 * 0.85)} FCFA</span>
-                        </div>
-                        <div className="flex justify-between text-sm text-gray-600">
-                          <span>Commission de service</span>
-                          <span>5%</span>
-                        </div>
-                      </div>
+                      {/* ✅ Tarifs uniquement pour équipements */}
+                      {!isRoom && (
+                        <>
+                          <div className="space-y-3 mb-5">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-700">Tarif semaine (7j)</span>
+                              <span className="font-medium">{formatPrice(price * 7 * 0.93)} FCFA</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-700">Tarif mois (30j)</span>
+                              <span className="font-medium">{formatPrice(price * 30 * 0.85)} FCFA</span>
+                            </div>
+                            <div className="flex justify-between text-sm text-gray-600">
+                              <span>Commission de service</span>
+                              <span>5%</span>
+                            </div>
+                          </div>
 
-                      <Separator className="my-5" />
+                          <Separator className="my-5" />
+                        </>
+                      )}
 
                       <div className="flex justify-between items-center mb-6">
                         <div>
@@ -1503,7 +1502,7 @@ const EquipmentDetail = () => {
                           if (hasPendingBooking) {
                             toast({
                               title: "Réservation en attente",
-                              description: "Vous avez déjà une réservation en attente pour cet équipement.",
+                              description: "Vous avez déjà une réservation en attente.",
                               variant: "destructive"
                             });
                             return;
@@ -1515,7 +1514,7 @@ const EquipmentDetail = () => {
                       >
                         <Calendar className="h-5 w-5 mr-2" />
                         {equipment.owner_id === user?.id 
-                          ? 'Votre équipement' 
+                          ? `Votre ${itemLabel}` 
                           : hasPendingBooking
                           ? 'Réservation en attente'
                           : equipment.status === 'disponible' ? 'Réserver' : 'Indisponible'}
@@ -1592,9 +1591,9 @@ const EquipmentDetail = () => {
                 <div className="flex-1">
                   <div className="flex items-baseline gap-1 mb-1">
                     <span className="text-xl font-bold text-gray-900">
-                      {formatPrice(equipment.daily_price)} FCFA
+                      {formatPrice(price)} FCFA
                     </span>
-                    <span className="text-gray-600 text-sm">par jour</span>
+                    <span className="text-gray-600 text-sm">par {unit}</span>
                   </div>
                   
                   <div className="flex items-center text-sm text-gray-600">
@@ -1616,7 +1615,7 @@ const EquipmentDetail = () => {
                     if (hasPendingBooking) {
                       toast({
                         title: "Réservation en attente",
-                        description: "Vous avez déjà une réservation en attente pour cet équipement.",
+                        description: "Vous avez déjà une réservation en attente.",
                         variant: "destructive"
                       });
                       return;
@@ -1627,7 +1626,7 @@ const EquipmentDetail = () => {
                   disabled={equipment.status !== 'disponible' || equipment.owner_id === user?.id || hasPendingBooking}
                 >
                   {equipment.owner_id === user?.id 
-                    ? 'Votre équipement' 
+                    ? `Votre ${itemLabel}` 
                     : hasPendingBooking
                     ? 'En attente'
                     : 'Réserver'}
