@@ -111,7 +111,7 @@ const MyEquipments: React.FC = () => {
                 Mes équipements
               </h1>
               {!isMobile && (
-                <p className="text-gray-600">Gérez vos équipements en location</p>
+                <p className="text-gray-600">Gérez vos équipements </p>
               )}
             </div>
           </div>
@@ -240,8 +240,11 @@ const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment, isMobile, onCl
       if (equipment.status === 'loue') {
         return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">📦 Loué</Badge>;
       }
+      if (equipment.status === 'indisponible') {
+        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">❌ Indisponible</Badge>;
+      }
     }
-    return <Badge variant="outline" className="text-xs">En attente</Badge>;
+    return <Badge variant="outline" className="text-xs">{equipment.status}  En attente</Badge>;
   };
 
   return (

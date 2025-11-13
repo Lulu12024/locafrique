@@ -1,5 +1,4 @@
-// AirbnbStyleCard.tsx - CORRIGÉ: Vraies reviews + Pas de dates
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart, Star } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -17,10 +16,11 @@ const AirbnbStyleCard: React.FC<AirbnbStyleCardProps> = ({ equipment }) => {
   const { addToFavorites, removeFromFavorites, isFavorite } = useFavorites();
   
   const isEquipmentFavorite = isFavorite(equipment.id);
-
-  // ✅ Récupérer les vraies stats depuis les props
   const averageRating = (equipment as any).averageRating || 0;
   const reviewCount = (equipment as any).reviewCount || 0;
+
+  // ✅ Unité basée sur price_type uniquement
+  const priceUnit = equipment.price_type === 'monthly' ? 'mois' : 'jour';
 
   const handleClick = () => {
     navigate(`/equipments/details/${equipment.id}`);
@@ -35,7 +35,6 @@ const AirbnbStyleCard: React.FC<AirbnbStyleCardProps> = ({ equipment }) => {
     }
   };
 
-  // Gestion des images
   const images = Array.isArray(equipment.images) ? equipment.images : [];
   const primaryImage = images.find(img => img.is_primary) || images[0];
   const imageUrl = primaryImage?.image_url || "/placeholder.svg";
@@ -45,7 +44,6 @@ const AirbnbStyleCard: React.FC<AirbnbStyleCardProps> = ({ equipment }) => {
       className={`cursor-pointer group ${isMobile ? 'w-full' : 'w-full'}`}
       onClick={handleClick}
     >
-      {/* Image container */}
       <div className={`relative overflow-hidden rounded-xl ${isMobile ? 'aspect-square' : 'aspect-[4/3]'}`}>
         <img 
           src={imageUrl} 
@@ -56,7 +54,6 @@ const AirbnbStyleCard: React.FC<AirbnbStyleCardProps> = ({ equipment }) => {
           }}
         />
         
-        {/* Favorite button */}
         <button
           onClick={handleFavoriteClick}
           className={`absolute ${isMobile ? 'top-1.5 right-1.5 w-6 h-6' : 'top-2 right-2 w-6 h-6'} bg-white/80 hover:bg-white rounded-full flex items-center justify-center transition-colors`}
@@ -66,7 +63,6 @@ const AirbnbStyleCard: React.FC<AirbnbStyleCardProps> = ({ equipment }) => {
           />
         </button>
 
-        {/* Category badge */}
         {equipment.category && (
           <div className={`absolute ${isMobile ? 'top-1.5 left-1.5' : 'top-2 left-2'}`}>
             <Badge className={`bg-green-500 text-white ${isMobile ? 'text-xs px-1.5 py-0.5' : 'text-xs px-1.5 py-0.5'}`}>
@@ -74,14 +70,9 @@ const AirbnbStyleCard: React.FC<AirbnbStyleCardProps> = ({ equipment }) => {
             </Badge>
           </div>
         )}
-
-        {/* Status indicator */}
-       
       </div>
 
-      {/* Content */}
       <div className={`${isMobile ? 'p-2' : 'p-2'}`}>
-        {/* Title and rating - ✅ VRAIES STATS */}
         <div className="flex items-center justify-between mb-1">
           <h3 className={`font-medium text-gray-900 truncate flex-1 ${isMobile ? 'text-xs' : 'text-xs'}`}>
             {equipment.title}
@@ -103,24 +94,19 @@ const AirbnbStyleCard: React.FC<AirbnbStyleCardProps> = ({ equipment }) => {
           )}
         </div>
 
-        {/* Location */}
         <div className={`text-gray-500 mb-1 ${isMobile ? 'text-xs' : 'text-xs'}`}>
           {equipment.city ? `${equipment.city}${equipment.country ? `, ${equipment.country}` : ''}` : equipment.country}
         </div>
 
-        {/* ❌ DATES RETIRÉES */}
-
-        {/* Price */}
         <div className="flex items-baseline space-x-1">
           <span className={`font-semibold text-gray-900 ${isMobile ? 'text-xs' : 'text-xs'}`}>
             {equipment.daily_price?.toLocaleString()} FCFA
           </span>
           <span className={`text-gray-500 ${isMobile ? 'text-xs' : 'text-xs'}`}>
-            par jour
+            par {priceUnit}
           </span>
         </div>
 
-        {/* Additional info */}
         {equipment.condition && (
           <div className={`text-gray-400 mt-1 ${isMobile ? 'text-xs' : 'text-xs'}`}>
             État: {equipment.condition}
